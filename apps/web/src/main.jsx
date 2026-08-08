@@ -1,673 +1,507 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-
 import "./style.css";
 
-/* =========================================================
-   DONNÉES DE DÉMONSTRATION
-   ========================================================= */
+const POKEAPI = "https://pokeapi.co/api/v2";
 
 const pokemon = [
-  {
-    name: "Pikachu",
-    level: 12,
-    hp: 42,
-    maxHp: 50,
-    type: "ÉLECTRIK",
-    sprite: "⚡",
-  },
-  {
-    name: "Salamèche",
-    level: 10,
-    hp: 31,
-    maxHp: 40,
-    type: "FEU",
-    sprite: "🔥",
-  },
+{
+id: 25,
+name: "Pikachu",
+type: ["Électrik"],
+level: 18,
+hp: 52,
+maxHp: 52,
+sprite:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/25.gif",
+fallback:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png",
+},
+{
+id: 4,
+name: "Salamèche",
+type: ["Feu"],
+level: 16,
+hp: 38,
+maxHp: 44,
+sprite:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/4.gif",
+fallback:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png",
+},
+{
+id: 7,
+name: "Carapuce",
+type: ["Eau"],
+level: 15,
+hp: 41,
+maxHp: 45,
+sprite:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/7.gif",
+fallback:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/7.png",
+},
 ];
 
-const players = [
-  {
-    name: "Gabriel",
-    character: "Dresseur",
-    level: 12,
-    hp: 72,
-    maxHp: 80,
-    pokemon: "Pikachu",
-    status: "En exploration",
-  },
-  {
-    name: "Léo",
-    character: "Rival",
-    level: 11,
-    hp: 61,
-    maxHp: 75,
-    pokemon: "Salamèche",
-    status: "Combat",
-  },
+const wildPokemon = [
+{
+id: 19,
+name: "Rattata",
+level: 8,
+hp: 21,
+maxHp: 21,
+type: "Normal",
+sprite:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/19.gif",
+},
+{
+id: 16,
+name: "Roucool",
+level: 7,
+hp: 19,
+maxHp: 19,
+type: "Normal / Vol",
+sprite:
+"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/16.gif",
+},
 ];
 
-/* =========================================================
-   HEADER
-   ========================================================= */
+function Sprite({ src, fallback, alt }) {
+const [image, setImage] = useState(src);
 
-function Header({ mode, setMode }) {
-  return (
-    <header className="topbar">
-      <div className="logo">
-        <div className="logo-ball">
-          <span />
-        </div>
-
-        <div className="logo-text">
-          <strong>POKÉMON JDR</strong>
-          <small>GÉNÉRATION I</small>
-        </div>
-      </div>
-
-      <nav className="main-nav">
-        <button
-          className={
-            mode === "player"
-              ? "nav-button active"
-              : "nav-button"
-          }
-          onClick={() => setMode("player")}
-        >
-          JOUEUR
-        </button>
-
-        <button
-          className={
-            mode === "mj"
-              ? "nav-button active mj-button"
-              : "nav-button mj-button"
-          }
-          onClick={() => setMode("mj")}
-        >
-          MJ
-        </button>
-      </nav>
-    </header>
-  );
+return (
+<img
+className="pokemon-sprite"
+src={image}
+alt={alt}
+onError={() => {
+if (fallback && image !== fallback) {
+setImage(fallback);
 }
-
-/* =========================================================
-   BARRE DE PV
-   ========================================================= */
+}}
+/>
+);
+}
 
 function HpBar({ hp, maxHp }) {
-  const percentage = Math.max(
-    0,
-    Math.min(100, (hp / maxHp) * 100)
-  );
+const percentage = Math.max(0, Math.min(100, (hp / maxHp) * 100));
 
-  return (
-    <div className="hp-container">
-      <div className="hp-label">
-        <span>PV</span>
+return ( <div className="hp-wrapper"> <div className="hp-label"> <span>PV</span> <strong>
+{hp} / {maxHp} </strong> </div>
 
-        <span>
-          {hp} / {maxHp}
-        </span>
-      </div>
+```
+  <div className="hp-bar">
+    <div className="hp-fill" style={{ width: `${percentage}%` }} />
+  </div>
+</div>
+```
 
-      <div className="hp-bar">
-        <div
-          className="hp-fill"
-          style={{
-            width: `${percentage}%`,
-          }}
-        />
-      </div>
-    </div>
-  );
+);
 }
 
-/* =========================================================
-   INTERFACE JOUEUR
-   ========================================================= */
+function Header({ mode, setMode }) {
+return ( <header className="topbar"> <div className="logo"> <span className="pokeball-mini">●</span> <div> <strong>POKÉMON JDR</strong> <small>Génération I · RPG</small> </div> </div>
+
+```
+  <div className="mode-switch">
+    <button
+      className={mode === "player" ? "active" : ""}
+      onClick={() => setMode("player")}
+    >
+      🎮 JOUEUR
+    </button>
+
+    <button
+      className={mode === "gm" ? "active gm" : ""}
+      onClick={() => setMode("gm")}
+    >
+      🧙 MJ
+    </button>
+  </div>
+</header>
+```
+
+);
+}
 
 function PlayerInterface() {
-  const [selectedPokemon, setSelectedPokemon] = useState(0);
+const [activePokemon, setActivePokemon] = useState(pokemon[0]);
+const [log, setLog] = useState([
+"Bienvenue dans votre aventure.",
+"Vous êtes entré dans la Route 1.",
+"Un Pokémon sauvage pourrait apparaître...",
+]);
 
-  const [message, setMessage] = useState(
-    "Une nouvelle aventure commence..."
-  );
+const [diceResult, setDiceResult] = useState(null);
 
-  const currentPokemon =
-    pokemon[selectedPokemon];
+function rollDice(sides) {
+const result = Math.floor(Math.random() * sides) + 1;
 
-  return (
-    <main className="screen">
-      <div className="player-layout">
-        {/* -----------------------------------------------
-            DRESSEUR
-        ------------------------------------------------ */}
+```
+setDiceResult({
+  sides,
+  result,
+});
 
-        <section className="panel player-card">
-          <div className="panel-title">
-            <span>DRESSEUR</span>
+setLog((previous) => [
+  `🎲 Jet de D${sides} : ${result}`,
+  ...previous,
+]);
+```
 
-            <span className="badge blue">
-              LV. 12
-            </span>
-          </div>
-
-          <div className="character">
-            <div className="character-sprite">
-              🧢
-            </div>
-
-            <div>
-              <h1>Gabriel</h1>
-
-              <p className="muted">
-                Dresseur Pokémon
-              </p>
-            </div>
-          </div>
-
-          <div className="stat-row">
-            <span>PV</span>
-
-            <strong>80 / 80</strong>
-          </div>
-
-          <div className="xp-bar">
-            <div
-              style={{
-                width: "68%",
-              }}
-            />
-          </div>
-
-          <div className="stat-grid">
-            <div>
-              <small>ARGENT</small>
-
-              <strong>₽ 2 450</strong>
-            </div>
-
-            <div>
-              <small>BADGES</small>
-
-              <strong>2 / 8</strong>
-            </div>
-          </div>
-        </section>
-
-        {/* -----------------------------------------------
-            ÉQUIPE
-        ------------------------------------------------ */}
-
-        <section className="panel pokemon-panel">
-          <div className="panel-title">
-            <span>ÉQUIPE</span>
-
-            <span className="badge red">
-              2 / 6
-            </span>
-          </div>
-
-          <div className="pokemon-list">
-            {pokemon.map((p, index) => (
-              <button
-                key={p.name}
-                className={
-                  selectedPokemon === index
-                    ? "pokemon-row selected"
-                    : "pokemon-row"
-                }
-                onClick={() =>
-                  setSelectedPokemon(index)
-                }
-              >
-                <span className="pokemon-icon">
-                  {p.sprite}
-                </span>
-
-                <span className="pokemon-info">
-                  <strong>{p.name}</strong>
-
-                  <small>
-                    NIVEAU {p.level}
-                  </small>
-                </span>
-
-                <span className="pokemon-type">
-                  {p.type}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* -----------------------------------------------
-            POKEMON ACTIF
-        ------------------------------------------------ */}
-
-        <section className="panel active-pokemon">
-          <div className="panel-title">
-            <span>POKÉMON ACTIF</span>
-          </div>
-
-          <div className="pokemon-display">
-            <div className="big-sprite">
-              {currentPokemon.sprite}
-            </div>
-
-            <div className="pokemon-details">
-              <h2>{currentPokemon.name}</h2>
-
-              <p>
-                Niveau {currentPokemon.level}
-              </p>
-
-              <HpBar
-                hp={currentPokemon.hp}
-                maxHp={currentPokemon.maxHp}
-              />
-
-              <div className="type-pill">
-                {currentPokemon.type}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* -----------------------------------------------
-            JOURNAL
-        ------------------------------------------------ */}
-
-        <section className="panel adventure-panel">
-          <div className="panel-title">
-            <span>JOURNAL D'AVENTURE</span>
-          </div>
-
-          <div className="story-box">
-            <div className="story-icon">
-              !
-            </div>
-
-            <div>
-              <h3>Route 1</h3>
-
-              <p>
-                Le chemin s'étend devant toi.
-                De hautes herbes bougent
-                légèrement au loin...
-              </p>
-            </div>
-          </div>
-
-          <div className="action-grid">
-            <button
-              onClick={() =>
-                setMessage(
-                  "Tu avances prudemment dans les hautes herbes."
-                )
-              }
-            >
-              EXPLORER
-            </button>
-
-            <button
-              onClick={() =>
-                setMessage(
-                  "Tu regardes attentivement autour de toi."
-                )
-              }
-            >
-              OBSERVER
-            </button>
-
-            <button
-              onClick={() =>
-                setMessage(
-                  "Tu installes ton campement."
-                )
-              }
-            >
-              CAMPER
-            </button>
-
-            <button
-              onClick={() =>
-                setMessage(
-                  "Tu consultes ton inventaire."
-                )
-              }
-            >
-              SAC
-            </button>
-          </div>
-
-          <div className="message-box">
-            {message}
-          </div>
-        </section>
-      </div>
-    </main>
-  );
 }
 
-/* =========================================================
-   CARTE MJ
-   ========================================================= */
+function playCry() {
+const audio = new Audio(
+`${POKEAPI}/pokemon/${activePokemon.id}`
+);
 
-function Map() {
-  return (
-    <div className="map">
-      <div className="map-grid" />
+```
+fetch(`${POKEAPI}/pokemon/${activePokemon.id}`)
+  .then((response) => response.json())
+  .then((data) => {
+    if (data.cries?.latest) {
+      new Audio(data.cries.latest).play();
+    }
+  })
+  .catch(() => {});
+```
 
-      <div className="map-title">
-        CARTE — KANTO
-      </div>
+}
 
-      <div className="map-route route-1">
-        ROUTE 1
-      </div>
+return ( <main className="game-layout player-layout"> <section className="player-hero panel"> <div className="location"> <span>LOCALISATION</span> <strong>ROUTE 1</strong> <small>Kanto · 16:42</small> </div>
 
-      <div className="map-route route-2">
-        ROUTE 2
-      </div>
-
-      <div className="map-city pallet">
-        <span>PALLET</span>
-        <small>VILLE</small>
-      </div>
-
-      <div className="map-city viridian">
-        <span>VIRIDIAN</span>
-        <small>VILLE</small>
-      </div>
-
-      <div className="map-city pewter">
-        <span>PEWTER</span>
-        <small>VILLE</small>
-      </div>
-
-      <div className="map-player">
-        ★
-      </div>
-
-      <div className="map-npc npc-1">
-        ●
-      </div>
-
-      <div className="map-npc npc-2">
-        ●
-      </div>
-
-      <div className="map-npc npc-3">
-        ●
+```
+    <div className="trainer">
+      <div className="trainer-avatar">🧢</div>
+      <div>
+        <span>DRESSEUR</span>
+        <strong>GABRIEL</strong>
+        <small>Niveau 12 · 1 240 XP</small>
       </div>
     </div>
-  );
-}
+  </section>
 
-/* =========================================================
-   INTERFACE MJ
-   ========================================================= */
-
-function MasterInterface() {
-  const [selectedPlayer, setSelectedPlayer] =
-    useState(0);
-
-  const [event, setEvent] = useState("");
-
-  const player =
-    players[selectedPlayer];
-
-  return (
-    <main className="screen">
-      <div className="mj-layout">
-        {/* -----------------------------------------------
-            SIDEBAR MJ
-        ------------------------------------------------ */}
-
-        <aside className="panel mj-sidebar">
-          <div className="panel-title">
-            <span>JOUEURS</span>
-
-            <span className="badge purple">
-              {players.length}
-            </span>
-          </div>
-
-          {players.map((p, index) => (
-            <button
-              key={p.name}
-              className={
-                selectedPlayer === index
-                  ? "mj-player selected"
-                  : "mj-player"
-              }
-              onClick={() =>
-                setSelectedPlayer(index)
-              }
-            >
-              <span className="avatar">
-                👤
-              </span>
-
-              <span>
-                <strong>{p.name}</strong>
-
-                <small>
-                  {p.status}
-                </small>
-              </span>
-            </button>
-          ))}
-
-          <div className="separator" />
-
-          <div className="panel-title">
-            <span>OUTILS MJ</span>
-          </div>
-
-          <button
-            className="tool-button"
-            onClick={() =>
-              setEvent(
-                "Un combat sauvage a été créé."
-              )
-            }
-          >
-            ⚔ COMBAT
-          </button>
-
-          <button
-            className="tool-button"
-            onClick={() =>
-              setEvent(
-                "Un PNJ apparaît sur la route."
-              )
-            }
-          >
-            👤 PNJ
-          </button>
-
-          <button
-            className="tool-button"
-            onClick={() =>
-              setEvent(
-                "Un objet apparaît sur la carte."
-              )
-            }
-          >
-            🎁 OBJET
-          </button>
-
-          <button
-            className="tool-button"
-            onClick={() =>
-              setEvent(
-                "Le temps avance d'une heure."
-              )
-            }
-          >
-            ⏱ TEMPS
-          </button>
-
-          {event && (
-            <div className="event-message">
-              {event}
-            </div>
-          )}
-        </aside>
-
-        {/* -----------------------------------------------
-            ZONE PRINCIPALE MJ
-        ------------------------------------------------ */}
-
-        <section className="mj-main">
-          <div className="mj-header panel">
-            <div>
-              <span className="eyebrow">
-                SESSION ACTIVE
-              </span>
-
-              <h1>
-                Aventure à Kanto
-              </h1>
-            </div>
-
-            <div className="session-info">
-              <span>JOUR 3</span>
-
-              <span>14:32</span>
-
-              <span className="live">
-                ● LIVE
-              </span>
-            </div>
-          </div>
-
-          {/* LA CARTE EST UNIQUEMENT ICI,
-              DONC UNIQUEMENT CÔTÉ MJ */}
-
-          <Map />
-
-          <div className="mj-bottom">
-            {/* -----------------------------------------
-                JOUEUR SÉLECTIONNÉ
-            ------------------------------------------ */}
-
-            <section className="panel">
-              <div className="panel-title">
-                <span>
-                  JOUEUR SÉLECTIONNÉ
-                </span>
-              </div>
-
-              <div className="selected-player">
-                <div className="avatar big">
-                  👤
-                </div>
-
-                <div className="selected-player-info">
-                  <h2>
-                    {player.name}
-                  </h2>
-
-                  <p>
-                    {player.character}
-                  </p>
-
-                  <HpBar
-                    hp={player.hp}
-                    maxHp={player.maxHp}
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* -----------------------------------------
-                JOURNAL MJ
-            ------------------------------------------ */}
-
-            <section className="panel">
-              <div className="panel-title">
-                <span>
-                  ÉVÉNEMENTS
-                </span>
-              </div>
-
-              <div className="event-log">
-                <p>
-                  <span>14:31</span>
-
-                  Gabriel entre sur la
-                  Route 1.
-                </p>
-
-                <p>
-                  <span>14:28</span>
-
-                  Un Pokémon sauvage
-                  est apparu.
-                </p>
-
-                <p>
-                  <span>14:20</span>
-
-                  Le groupe quitte
-                  Bourg Palette.
-                </p>
-              </div>
-            </section>
-          </div>
-        </section>
+  <section className="battle-panel panel">
+    <div className="battle-header">
+      <div>
+        <span>POKÉMON ACTIF</span>
+        <h2>{activePokemon.name}</h2>
       </div>
-    </main>
-  );
-}
 
-/* =========================================================
-   APPLICATION
-   ========================================================= */
+      <div className="battle-actions">
+        <button onClick={playCry}>🔊 CRI</button>
+        <button onClick={() => rollDice(20)}>🎲 D20</button>
+      </div>
+    </div>
 
-function App() {
-  const [mode, setMode] =
-    useState("player");
+    <div className="pokemon-stage">
+      <div className="grass-shadow" />
 
-  return (
-    <>
-      <Header
-        mode={mode}
-        setMode={setMode}
+      <Sprite
+        src={activePokemon.sprite}
+        fallback={activePokemon.fallback}
+        alt={activePokemon.name}
       />
 
-      {mode === "mj" ? (
-        <MasterInterface />
-      ) : (
-        <PlayerInterface />
+      <div className="pokemon-info">
+        <div className="name-level">
+          <strong>{activePokemon.name}</strong>
+          <span>Lv. {activePokemon.level}</span>
+        </div>
+
+        <HpBar
+          hp={activePokemon.hp}
+          maxHp={activePokemon.maxHp}
+        />
+
+        <div className="types">
+          {activePokemon.type.map((type) => (
+            <span key={type} className={`type type-${type.toLowerCase()}`}>
+              {type}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section className="team-panel panel">
+    <div className="panel-title">
+      <h2>ÉQUIPE</h2>
+      <span>{pokemon.length} / 6</span>
+    </div>
+
+    <div className="team-grid">
+      {pokemon.map((poke) => (
+        <button
+          key={poke.id}
+          className={`team-card ${
+            activePokemon.id === poke.id ? "selected" : ""
+          }`}
+          onClick={() => setActivePokemon(poke)}
+        >
+          <Sprite
+            src={poke.sprite}
+            fallback={poke.fallback}
+            alt={poke.name}
+          />
+
+          <div>
+            <strong>{poke.name}</strong>
+            <span>Lv. {poke.level}</span>
+          </div>
+
+          <HpBar hp={poke.hp} maxHp={poke.maxHp} />
+        </button>
+      ))}
+    </div>
+  </section>
+
+  <section className="dice-panel panel">
+    <div className="panel-title">
+      <h2>JET DE DÉS</h2>
+      {diceResult && (
+        <strong className="dice-result">
+          D{diceResult.sides} → {diceResult.result}
+        </strong>
       )}
+    </div>
 
-      <footer>
-        <span>
-          POKÉMON JDR
-        </span>
+    <div className="dice-buttons">
+      {[4, 6, 8, 10, 12, 20, 100].map((sides) => (
+        <button key={sides} onClick={() => rollDice(sides)}>
+          D{sides}
+        </button>
+      ))}
+    </div>
+  </section>
 
-        <span>
-          Prototype — Génération I
-        </span>
-      </footer>
-    </>
-  );
+  <section className="inventory panel">
+    <div className="panel-title">
+      <h2>INVENTAIRE</h2>
+    </div>
+
+    <div className="items">
+      <div className="item">
+        <span>🔴</span>
+        <strong>Poké Ball</strong>
+        <b>x12</b>
+      </div>
+
+      <div className="item">
+        <span>🧪</span>
+        <strong>Potion</strong>
+        <b>x5</b>
+      </div>
+
+      <div className="item">
+        <span>🍖</span>
+        <strong>Rappel</strong>
+        <b>x2</b>
+      </div>
+
+      <div className="item">
+        <span>💰</span>
+        <strong>Pokédollars</strong>
+        <b>1 240</b>
+      </div>
+    </div>
+  </section>
+
+  <section className="journal panel">
+    <div className="panel-title">
+      <h2>JOURNAL</h2>
+    </div>
+
+    <div className="log">
+      {log.map((entry, index) => (
+        <p key={index}>{entry}</p>
+      ))}
+    </div>
+  </section>
+</main>
+```
+
+);
 }
 
-/* =========================================================
-   RENDU REACT
-   ========================================================= */
+function MapGrid() {
+const cells = Array.from({ length: 96 });
 
-createRoot(
-  document.getElementById("root")
-).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+return ( <div className="map-grid">
+{cells.map((_, index) => {
+const water = [4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25].includes(
+index
+);
+
+```
+    const forest = [34, 35, 36, 44, 45, 46, 54, 55, 56, 57].includes(
+      index
+    );
+
+    return (
+      <div
+        key={index}
+        className={`map-cell ${water ? "water" : ""} ${
+          forest ? "forest" : ""
+        }`}
+      >
+        {forest ? "♣" : water ? "~" : ""}
+      </div>
+    );
+  })}
+
+  <div className="map-player">🧢</div>
+  <div className="map-pokemon">!</div>
+</div>
+```
+
+);
+}
+
+function GMInterface() {
+const [encounter, setEncounter] = useState(wildPokemon[0]);
+const [showTokens, setShowTokens] = useState(true);
+const [gmLog, setGmLog] = useState([
+"Session ouverte.",
+"Gabriel est actuellement sur la Route 1.",
+"Aucune rencontre déclenchée.",
+]);
+
+function randomEncounter() {
+const selected =
+wildPokemon[Math.floor(Math.random() * wildPokemon.length)];
+
+```
+setEncounter(selected);
+
+setGmLog((previous) => [
+  `⚡ Rencontre : ${selected.name} niveau ${selected.level}`,
+  ...previous,
+]);
+```
+
+}
+
+return ( <main className="gm-layout"> <section className="gm-toolbar panel"> <div> <span>MODE MAÎTRE DU JEU</span> <h1>TABLE DE JEU</h1> </div>
+
+```
+    <div className="gm-buttons">
+      <button onClick={randomEncounter}>⚡ RENCONTRE</button>
+
+      <button onClick={() => setShowTokens(!showTokens)}>
+        {showTokens ? "👁 MASQUER TOKENS" : "👁 AFFICHER TOKENS"}
+      </button>
+    </div>
+  </section>
+
+  <section className="gm-map panel">
+    <div className="panel-title">
+      <h2>CARTE — ROUTE 1</h2>
+      <span>VISIBLE MJ UNIQUEMENT</span>
+    </div>
+
+    <div className="map-wrapper">
+      <MapGrid />
+
+      {showTokens && (
+        <>
+          <div className="map-token player-token">🧢</div>
+          <div className="map-token npc-token">🧑</div>
+          <div className="map-token pokemon-token">⚡</div>
+        </>
+      )}
+    </div>
+  </section>
+
+  <section className="gm-columns">
+    <div className="encounter panel">
+      <div className="panel-title">
+        <h2>RENCONTRE ACTIVE</h2>
+      </div>
+
+      <div className="encounter-content">
+        <Sprite src={encounter.sprite} alt={encounter.name} />
+
+        <div>
+          <span>POKÉMON SAUVAGE</span>
+          <h2>{encounter.name}</h2>
+          <strong>Niveau {encounter.level}</strong>
+          <p>{encounter.type}</p>
+
+          <HpBar
+            hp={encounter.hp}
+            maxHp={encounter.maxHp}
+          />
+
+          <div className="encounter-actions">
+            <button>⚔️ COMBAT</button>
+            <button>🏃 FUITE</button>
+            <button>🎯 CAPTURE</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div className="players panel">
+      <div className="panel-title">
+        <h2>JOUEURS</h2>
+        <span>1 CONNECTÉ</span>
+      </div>
+
+      <div className="player-row">
+        <div className="player-icon">🧢</div>
+
+        <div>
+          <strong>Gabriel</strong>
+          <span>Route 1 · Actif</span>
+        </div>
+
+        <span className="online">●</span>
+      </div>
+    </div>
+  </section>
+
+  <section className="gm-log panel">
+    <div className="panel-title">
+      <h2>JOURNAL MJ</h2>
+    </div>
+
+    {gmLog.map((entry, index) => (
+      <p key={index}>{entry}</p>
+    ))}
+  </section>
+</main>
+```
+
+);
+}
+
+function App() {
+const [mode, setMode] = useState("player");
+
+return (
+<> <Header mode={mode} setMode={setMode} />
+
+```
+  {mode === "player" ? (
+    <PlayerInterface />
+  ) : (
+    <GMInterface />
+  )}
+
+  <footer>
+    <span>POKÉMON JDR</span>
+    <span>Prototype · Génération I</span>
+  </footer>
+</>
+```
+
+);
+}
+
+createRoot(document.getElementById("root")).render(
+<React.StrictMode> <App />
+</React.StrictMode>
 );
