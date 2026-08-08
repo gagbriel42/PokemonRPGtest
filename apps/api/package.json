@@ -1,0 +1,11 @@
+{
+  "name": "@pokemon-rpg/api",
+  "private": true,
+  "scripts": {
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "@fastify/cors": "^11.0.0"
+  }
+}

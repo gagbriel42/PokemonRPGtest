@@ -1,0 +1,8 @@
+{
+  "name": "pokemon-rpg",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/api"
+  }
+}
