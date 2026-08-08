@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: pokemon-rpg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pokemon
+      POSTGRES_PASSWORD: pokemon
+      POSTGRES_DB: pokemon_jdr
+    ports:
+      - "5432:5432"
+    volumes:
+      - pokemon_rpg_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  pokemon_rpg_postgres_data:

@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// POKEMON
+// ============================================================
+
+model Pokemon {
+  id            Int    @id @default(autoincrement())
+  pokedexNumber Int    @unique
+  name          String
+  generation    Int    @default(1)
+
+  // Statistiques de base
+  hp             Int
+  attack         Int
+  defense        Int
+  specialAttack  Int
+  specialDefense Int
+  speed          Int
+
+  // Données générales
+  height         Float?
+  weight         Float?
+  baseExperience Int?
+  catchRate      Int?
+  genderRate     Float?
+
+  // Compatibilité avec ton modèle actuel
+  type1 String
+  type2 String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  types          PokemonType[]
+  abilities      PokemonAbility[]
+  moves          PokemonMove[]
+  evolutionsFrom Evolution[]       @relation("EvolutionFrom")
+  evolutionsTo   Evolution[]       @relation("EvolutionTo")
+  forms          PokemonForm[]
+  eggGroups      PokemonEggGroup[]
+  sprites        PokemonSprite[]
+
+  @@index([generation])
+  @@index([name])
+}
+
+// ============================================================
+// TYPES
+// ============================================================
+
+model Type {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  generation  Int?
+  description String?
+
+  pokemon PokemonType[]
+  moves   Move[]
+}
+
+model PokemonType {
+  pokemonId Int
+  typeId    Int
+  slot      Int
+
+  pokemon Pokemon @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  type    Type    @relation(fields: [typeId], references: [id], onDelete: Cascade)
+
+  @@id([pokemonId, typeId])
+  @@unique([pokemonId, slot])
+}
+
+// ============================================================
+// CAPACITES / TALENTS
+// ============================================================
+
+model Ability {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  generation  Int?
+  description String?
+  hidden      Boolean @default(false)
+
+  pokemon PokemonAbility[]
+}
+
+model PokemonAbility {
+  pokemonId Int
+  abilityId Int
+  isHidden  Boolean @default(false)
+  slot      Int?
+
+  pokemon Pokemon @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  ability Ability @relation(fields: [abilityId], references: [id], onDelete: Cascade)
+
+  @@id([pokemonId, abilityId])
+}
+
+// ============================================================
+// ATTAQUES
+// ============================================================
+
+model Move {
+  id         Int    @id @default(autoincrement())
+  name       String @unique
+  generation Int?
+  power      Int?
+  accuracy   Int?
+  pp         Int?
+  priority   Int    @default(0)
+
+  description String?
+  effect      String?
+
+  category    MoveCategory
+  damageClass DamageClass
+
+  typeId Int
+  type   Type @relation(fields: [typeId], references: [id])
+
+  pokemonMoves PokemonMove[]
+
+  @@index([typeId])
+  @@index([generation])
+}
+
+model PokemonMove {
+  pokemonId Int
+  moveId    Int
+
+  // Méthode d'apprentissage :
+  // LEVEL, TM, HM, EGG, TUTOR, MACHINE, etc.
+  learnMethod String
+
+  level      Int?
+  generation Int?
+
+  pokemon Pokemon @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  move    Move    @relation(fields: [moveId], references: [id], onDelete: Cascade)
+
+  @@id([pokemonId, moveId, learnMethod])
+  @@index([moveId])
+}
+
+model Evolution {
+  id Int @id @default(autoincrement())
+
+  fromPokemonId Int
+  toPokemonId   Int
+
+  fromPokemon Pokemon @relation("EvolutionFrom", fields: [fromPokemonId], references: [id], onDelete: Cascade)
+  toPokemon   Pokemon @relation("EvolutionTo", fields: [toPokemonId], references: [id], onDelete: Cascade)
+
+  level     Int?
+  item      String?
+  condition String?
+
+  @@unique([fromPokemonId, toPokemonId])
+}
+
+// ============================================================
+// FORMES
+// ============================================================
+
+model PokemonForm {
+  id        Int @id @default(autoincrement())
+  pokemonId Int
+
+  name     String
+  formName String?
+  formType FormType
+
+  generation Int?
+
+  isDefault    Boolean @default(false)
+  isBattleOnly Boolean @default(false)
+
+  type1 String?
+  type2 String?
+
+  hp             Int?
+  attack         Int?
+  defense        Int?
+  specialAttack  Int?
+  specialDefense Int?
+  speed          Int?
+
+  height Float?
+  weight Float?
+
+  description String?
+
+  pokemon Pokemon         @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  sprites PokemonSprite[]
+
+  @@unique([pokemonId, name])
+  @@index([formType])
+}
+
+// ============================================================
+// SPRITES / RESSOURCES VISUELLES
+// ============================================================
+
+model PokemonSprite {
+  id Int @id @default(autoincrement())
+
+  pokemonId Int?
+  formId    Int?
+
+  frontDefault String?
+  frontShiny   String?
+  backDefault  String?
+  backShiny    String?
+
+  officialArtwork String?
+  icon            String?
+
+  pokemon Pokemon?     @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  form    PokemonForm? @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([pokemonId])
+  @@index([formId])
+}
+
+// ============================================================
+// GROUPES D'ŒUFS / REPRODUCTION
+// ============================================================
+
+model EggGroup {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  pokemon PokemonEggGroup[]
+}
+
+model PokemonEggGroup {
+  pokemonId  Int
+  eggGroupId Int
+
+  pokemon  Pokemon  @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  eggGroup EggGroup @relation(fields: [eggGroupId], references: [id], onDelete: Cascade)
+
+  @@id([pokemonId, eggGroupId])
+}
+
+// ============================================================
+// NATURES
+// ============================================================
+
+model Nature {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  increasedStat  String?
+  decreasedStat  String?
+  favoriteFlavor String?
+  dislikedFlavor String?
+}
+
+// ============================================================
+// ENUMERATIONS
+// ============================================================
+
+enum MoveCategory {
+  PHYSICAL
+  SPECIAL
+  STATUS
+}
+
+enum DamageClass {
+  PHYSICAL
+  SPECIAL
+  STATUS
+}
+
+enum EvolutionTrigger {
+  LEVEL
+  ITEM
+  TRADE
+  FRIENDSHIP
+  STONE
+  LOCATION
+  MOVE
+  OTHER
+}
+
+enum FormType {
+  NORMAL
+  MEGA
+  GIGANTAMAX
+  GIGANTAMAX_FORM
+  REGIONAL
+  ALOLA
+  GALAR
+  HISUI
+  PALDEA
+  PRIMAL
+  ORIGIN
+  THERIAN
+  INCARNATE
+  TOTEM
+  BATTLE
+  OTHER
+}
