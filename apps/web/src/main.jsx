@@ -2,12 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-// Full Gen I Kanto rendering. The source image is 7520x6400; keeping its
-// native aspect ratio is essential or the whole map becomes visibly distorted.
 const MAP_IMAGE = "https://fotografias-2.larazon.es/assets/videojuegos/2019/04/Mapa-de-Kanto.jpg";
 const MAP_WIDTH = 7520;
 const MAP_HEIGHT = 6400;
-const FIT_SCALE = 0.105;
+const GM_FIT_SCALE = 0.105;
+const PLAYER_SCALE = 0.55;
 const MAX_GM_ZOOM = 6;
 
 const VERSION_INFO = {
@@ -40,7 +39,7 @@ function VersionLegend({ enabled, setEnabled }) {
 
 function VersionPanel({ enabled }) {
   const active = Object.entries(enabled).filter(([, on]) => on).map(([id]) => VERSION_INFO[id]);
-  return <aside className="gm-panel"><div className="panel-title">ÉLÉMENTS DISTINCTIFS</div>{active.map(v => <div className="version-card" key={v.label} style={{ "--version-color": v.color }}><div className="version-card-title"><span className="version-dot" />{v.title}</div>{v.details.map(d => <p key={d}>{d}</p>)}</div>)}<div className="gm-message"><strong>Carte Gen I</strong><p>La carte conserve son rapport largeur/hauteur original. Le MJ peut la déplacer et la zoomer sans déformation.</p></div></aside>;
+  return <aside className="gm-panel"><div className="panel-title">ÉLÉMENTS DISTINCTIFS</div>{active.map(v => <div className="version-card" key={v.label} style={{ "--version-color": v.color }}><div className="version-card-title"><span className="version-dot" />{v.title}</div>{v.details.map(d => <p key={d}>{d}</p>)}</div>)}<div className="gm-message"><strong>Carte Gen I</strong><p>Le MJ dispose d'une vue large et peut déplacer la carte librement. Le joueur dispose d'une caméra centrée sur son personnage.</p></div></aside>;
 }
 
 function ZoomControls({ zoom, setZoom }) {
@@ -54,8 +53,7 @@ function GameMap({ mode, enabled }) {
   const [gmOffset, setGmOffset] = useState({ x: 0, y: 0 });
   const [player, setPlayer] = useState({ x: 11, y: 75 });
 
-  const playerScale = 0.42;
-  const scale = mode === "gm" ? FIT_SCALE * gmZoom : playerScale;
+  const scale = mode === "gm" ? GM_FIT_SCALE * gmZoom : PLAYER_SCALE;
 
   function viewportSize() {
     const el = viewportRef.current;
@@ -66,39 +64,54 @@ function GameMap({ mode, enabled }) {
     const { w, h } = viewportSize();
     const mapW = MAP_WIDTH * nextScale;
     const mapH = MAP_HEIGHT * nextScale;
-    return { x: Math.min(0, Math.max(w - mapW, x)), y: Math.min(0, Math.max(h - mapH, y)) };
+    const minX = Math.min(0, w - mapW);
+    const minY = Math.min(0, h - mapH);
+    return { x: Math.min(0, Math.max(minX, x)), y: Math.min(0, Math.max(minY, y)) };
   }
 
-  function playerOffset() {
+  function playerCamera() {
     const { w, h } = viewportSize();
-    const px = MAP_WIDTH * player.x / 100 * playerScale;
-    const py = MAP_HEIGHT * player.y / 100 * playerScale;
+    const px = MAP_WIDTH * player.x / 100 * scale;
+    const py = MAP_HEIGHT * player.y / 100 * scale;
     return { x: w / 2 - px, y: h / 2 - py };
   }
 
   function changeGmZoom(z) {
     const next = Math.min(MAX_GM_ZOOM, Math.max(1, z));
     setGmZoom(next);
-    setGmOffset(o => clampOffset(o.x, o.y, FIT_SCALE * next));
+    setGmOffset(o => clampOffset(o.x, o.y, GM_FIT_SCALE * next));
   }
 
   useEffect(() => {
-    if (mode === "gm") setGmOffset(clampOffset(0, 0, FIT_SCALE));
+    const resize = () => {
+      if (mode === "gm") setGmOffset(o => clampOffset(o.x, o.y, GM_FIT_SCALE * gmZoom));
+    };
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [mode, gmZoom]);
+
+  useEffect(() => {
+    if (mode === "gm") setGmOffset(clampOffset(0, 0, GM_FIT_SCALE));
   }, [mode]);
 
   useEffect(() => {
     if (mode !== "player") return;
     const keys = new Set();
-    const down = e => { keys.add(e.key.toLowerCase()); };
-    const up = e => { keys.delete(e.key.toLowerCase()); };
-    window.addEventListener("keydown", down); window.addEventListener("keyup", up);
+    const down = e => {
+      const key = e.key.toLowerCase();
+      if (["arrowleft", "arrowright", "arrowup", "arrowdown", "z", "q", "s", "d", "w", "a"].includes(key)) e.preventDefault();
+      keys.add(key);
+    };
+    const up = e => keys.delete(e.key.toLowerCase());
+    window.addEventListener("keydown", down, { passive: false });
+    window.addEventListener("keyup", up);
     let raf;
     const tick = () => {
       let dx = 0, dy = 0;
-      if (keys.has("arrowleft") || keys.has("q") || keys.has("a")) dx -= .12;
-      if (keys.has("arrowright") || keys.has("d")) dx += .12;
-      if (keys.has("arrowup") || keys.has("z") || keys.has("w")) dy -= .12;
-      if (keys.has("arrowdown") || keys.has("s")) dy += .12;
+      if (keys.has("arrowleft") || keys.has("q") || keys.has("a")) dx -= .10;
+      if (keys.has("arrowright") || keys.has("d")) dx += .10;
+      if (keys.has("arrowup") || keys.has("z") || keys.has("w")) dy -= .10;
+      if (keys.has("arrowdown") || keys.has("s")) dy += .10;
       if (dx || dy) setPlayer(p => ({ x: Math.max(0, Math.min(100, p.x + dx)), y: Math.max(0, Math.min(100, p.y + dy)) }));
       raf = requestAnimationFrame(tick);
     };
@@ -117,14 +130,15 @@ function GameMap({ mode, enabled }) {
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { x: e.clientX, y: e.clientY, ox: gmOffset.x, oy: gmOffset.y };
   }
+
   function onPointerMove(e) {
     if (!drag.current) return;
     setGmOffset(clampOffset(drag.current.ox + e.clientX - drag.current.x, drag.current.oy + e.clientY - drag.current.y));
   }
+
   function onPointerUp() { drag.current = null; }
 
-  const playerPos = playerOffset();
-  const mapPos = mode === "gm" ? gmOffset : playerPos;
+  const mapPos = mode === "gm" ? gmOffset : playerCamera();
   const markerList = VERSION_MARKERS.filter(m => enabled[m.version]);
 
   return <div className="map-shell"><div className="map-heading"><div><span>CARTE DU MONDE</span><strong>KANTO · GEN I</strong></div><small>{mode === "gm" ? "MJ · PAN + ZOOM" : "JOUEUR · EXPLORATION"}</small></div>{mode === "gm" && <ZoomControls zoom={gmZoom} setZoom={changeGmZoom} />}<div ref={viewportRef} className={`map-viewport ${mode === "gm" ? "interactive" : "player-camera"}`} onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}><div className="full-kanto-map" style={{ left: `${mapPos.x}px`, top: `${mapPos.y}px`, width: `${MAP_WIDTH}px`, height: `${MAP_HEIGHT}px`, transform: `scale(${scale})` }}><img src={MAP_IMAGE} alt="Carte complète de Kanto Pokémon Rouge et Bleu" draggable="false" />{LOCATIONS.map(([name, x, y]) => <div className="location-label" key={name} style={{ left: `${MAP_WIDTH*x/100}px`, top: `${MAP_HEIGHT*y/100}px` }}>{name}</div>)}{markerList.map(m => <button key={m.id} className="version-marker" style={{ left: `${MAP_WIDTH*m.x/100}px`, top: `${MAP_HEIGHT*m.y/100}px`, "--version-color": VERSION_INFO[m.version].color }} title={m.text}>{VERSION_INFO[m.version].label}</button>)}{mode === "player" && <div className="player-map-marker" style={{ left: `${MAP_WIDTH*player.x/100}px`, top: `${MAP_HEIGHT*player.y/100}px` }}><span /></div>}</div></div>{mode === "gm" ? <div className="zoom-hint">Molette · glisser · boutons · zoom 100–600 %</div> : <div className="zoom-hint">ZQSD / WASD / flèches · caméra centrée sur le joueur</div>}</div>;
