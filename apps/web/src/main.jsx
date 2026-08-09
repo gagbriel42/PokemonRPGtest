@@ -2,184 +2,30 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const COLS = 32, ROWS = 24, TILE = 32;
-const WORLD_W = COLS * TILE, WORLD_H = ROWS * TILE, MAX_ZOOM = 4;
-const RED_SPRITE = "https://raw.githubusercontent.com/pret/pokered/master/gfx/sprites/red.png";
-const SPRITES = {
-  pikachu: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/25.png",
-  rattata: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/19.png",
-  bulbasaur: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/1.png"
-};
+const TILE = 32, COLS = 36, ROWS = 28, WORLD_W = COLS*TILE, WORLD_H = ROWS*TILE, MAX_ZOOM = 4;
+const TILESET = "https://raw.githubusercontent.com/pret/pokered/master/gfx/tilesets/overworld.png";
+const RED = "https://raw.githubusercontent.com/pret/pokered/master/gfx/sprites/red.png";
+const POKEMON = { pikachu:"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/25.png", rattata:"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/19.png" };
+const POS = { grass:[0,-128], path:[-64,-128], water:[-96,-128], tree:[-384,-64], tallgrass:[-160,-128], flower:[-224,-128], rock:[-352,-128], bridge:[-96,-64] };
+const MAP = Array.from({length:ROWS},(_,y)=>Array.from({length:COLS},(_,x)=>{ if(x<2||y<2||x>=COLS-2||y>=ROWS-2)return "tree"; if(x>=15&&x<=18)return "water"; if(x===16||x===17)return "bridge"; if((y>=13&&y<=15)||(x>=15&&x<=18))return "path"; if(x>=5&&x<=11&&y>=4&&y<=10)return "tallgrass"; if(x>=25&&x<=32&&y>=18&&y<=24)return "tallgrass"; if((x*17+y*7)%37===0)return "flower"; return "grass";}));
+const BUILDINGS=[{id:"house",x:4,y:4,w:6,h:4,name:"Maison de Red"},{id:"lab",x:25,y:4,w:7,h:5,name:"Laboratoire du Professeur Chen"},{id:"center",x:4,y:18,w:7,h:4,name:"Centre Pokémon"},{id:"mart",x:25,y:18,w:6,h:4,name:"Boutique"}];
+const OBJECTS=[{id:"oak",x:21,y:11,kind:"npc",name:"Professeur Chen",text:"Un PNJ de Bourg Palette."},{id:"rival",x:12,y:14,kind:"npc",name:"Rival",text:"Le rival attend ici."},{id:"cut",x:12,y:9,kind:"cut",name:"Petit arbre",text:"COUPE permet de retirer cet obstacle."},{id:"boulder",x:22,y:20,kind:"strength",name:"Rocher",text:"FORCE permet de pousser ce rocher."},{id:"sign",x:13,y:15,kind:"sign",name:"Panneau",text:"BOURG PALETTE — ROUTE 1"},{id:"pikachu",x:28,y:20,kind:"wild",name:"Pikachu sauvage",text:"Rencontre dans les hautes herbes.",sprite:POKEMON.pikachu},{id:"rattata",x:30,y:22,kind:"wild",name:"Rattata sauvage",text:"Rencontre dans les hautes herbes.",sprite:POKEMON.rattata}];
+const DELTA={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
 
-const BASE_MAP = Array.from({ length: ROWS }, (_, y) => Array.from({ length: COLS }, (_, x) => {
-  if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) return "tree";
-  if (x >= 13 && x <= 16 && y >= 1 && y <= 22) return "water";
-  if (x === 14 || x === 15) return "bridge";
-  if ((y >= 11 && y <= 13) || (x >= 14 && x <= 15)) return "path";
-  if (x >= 3 && x <= 9 && y >= 4 && y <= 9) return "grass";
-  if (x >= 21 && x <= 28 && y >= 16 && y <= 21) return "tallgrass";
-  if ((x * 7 + y * 11) % 31 === 0) return "flower";
-  return "grass";
-}));
-
-const BUILDINGS = [
-  { id: "house", x: 4, y: 4, w: 5, h: 4, title: "Maison de Red", text: "Entrée de la maison du joueur." },
-  { id: "lab", x: 24, y: 4, w: 6, h: 5, title: "Laboratoire du Professeur Chen", text: "Laboratoire de Bourg Palette." },
-  { id: "center", x: 4, y: 17, w: 6, h: 4, title: "Centre Pokémon", text: "Soins Pokémon." },
-  { id: "mart", x: 24, y: 17, w: 5, h: 4, title: "Boutique", text: "Objets et achats." }
-];
-
-const OBJECTS = [
-  { id: "oak", x: 21, y: 7, kind: "npc", title: "Professeur Chen", text: "PNJ Gen I." },
-  { id: "rival", x: 11, y: 11, kind: "npc", title: "Rival", text: "PNJ mobile." },
-  { id: "cut", x: 11, y: 8, kind: "cut", title: "Arbre à couper", text: "Nécessite COUPE." },
-  { id: "boulder", x: 19, y: 19, kind: "strength", title: "Rocher poussable", text: "Nécessite FORCE." },
-  { id: "sign", x: 12, y: 13, kind: "sign", title: "Panneau", text: "BOURG PALETTE — ROUTE 1." },
-  { id: "pikachu", x: 25, y: 18, kind: "wild", title: "Pikachu caché", text: "Rencontre sauvage.", sprite: "pikachu", hidden: true },
-  { id: "rattata", x: 27, y: 19, kind: "wild", title: "Rattata caché", text: "Rencontre sauvage.", sprite: "rattata", hidden: true },
-  { id: "bulbasaur", x: 7, y: 6, kind: "wild", title: "Bulbizarre caché", text: "Rencontre sauvage.", sprite: "bulbasaur", hidden: true }
-];
-
-const key = (x, y) => `${x}:${y}`;
-const walkable = type => !["tree", "water"].includes(type);
-
-function Header({ mode, setMode }) {
-  return <header className="topbar"><div className="brand"><div className="pokeball-logo"><span /></div><div><strong>POKÉMON JDR</strong><small>GÉNÉRATION I · KANTO</small></div></div><div className="mode-switch"><button className={mode === "player" ? "active" : ""} onClick={() => setMode("player")}>JOUEUR</button><button className={mode === "gm" ? "active gm" : ""} onClick={() => setMode("gm")}>MJ</button></div></header>;
-}
-
-function RedSprite({ direction = "down" }) {
-  const frame = { down: 0, up: 1, left: 2, right: 3 }[direction] ?? 0;
-  return <span className={`red-sprite red-${direction}`} style={{ backgroundImage: `url(${RED_SPRITE})`, backgroundPosition: `0 -${frame * 32}px` }} />;
-}
-
-function Tile({ type, x, y }) {
-  return <div className={`tile tile-${type}`} style={{ left: x * TILE, top: y * TILE }} />;
-}
-
-function Building({ building, onClick }) {
-  const label = building.id === "lab" ? "LAB" : building.id === "center" ? "P.C." : building.id === "mart" ? "SHOP" : "HOUSE";
-  return <button className={`building building-${building.id}`} style={{ left: building.x * TILE, top: building.y * TILE, width: building.w * TILE, height: building.h * TILE }} onClick={() => onClick(building)} title={building.title}><span>{label}</span><i /></button>;
-}
-
-function MapObject({ object, visible, selected, onClick }) {
-  if (!visible) return null;
-  let content;
-  if (object.sprite) content = <img src={SPRITES[object.sprite]} alt="" />;
-  else if (object.kind === "npc") content = <RedSprite />;
-  else content = <span className={`object-icon icon-${object.kind}`} />;
-  const label = object.kind === "npc" ? "PNJ" : object.kind === "wild" ? "?" : object.kind === "cut" ? "COUPE" : object.kind === "strength" ? "FORCE" : "";
-  return <button className={`map-object object-${object.kind} ${selected ? "selected" : ""}`} style={{ left: object.x * TILE, top: object.y * TILE }} onClick={() => onClick(object)} title={object.title}>{content}<b>{label}</b></button>;
-}
-
-function SidePanel({ mode, selected, onAction }) {
-  const item = [...OBJECTS, ...BUILDINGS].find(x => x.id === selected);
-  if (!item) return <aside className="side-panel"><div className="panel-title">{mode === "gm" ? "MJ · OUTILS" : "JOUEUR · AIDE"}</div><div className="panel-empty"><strong>Carte Gen I interactive</strong><p>{mode === "gm" ? "Sélectionnez un PNJ, une rencontre ou un élément du décor." : "ZQSD / WASD / flèches pour marcher. E pour interagir."}</p></div></aside>;
-  return <aside className="side-panel"><div className="panel-title">{mode === "gm" ? "MJ · ÉLÉMENT" : "INTERACTION"}</div><div className="interaction"><span className={`kind kind-${item.kind || "building"}`}>{(item.kind || "building").toUpperCase()}</span><h2>{item.title}</h2><p>{item.text}</p>{mode === "gm" && item.kind === "npc" && <div className="stats"><span>ÉQUIPE</span><strong>À définir</strong><span>NIVEAU</span><strong>À définir</strong><span>PV</span><strong>À définir</strong></div>}<button className="action" onClick={() => onAction(item)}>{mode === "gm" ? "OUVRIR LA FICHE MJ" : "INTERAGIR"}</button></div></aside>;
-}
-
-function MapControls({ zoom, setZoom }) {
-  return <div className="controls"><button onClick={() => setZoom(Math.min(MAX_ZOOM, +(zoom + 0.25).toFixed(2)))}>+</button><span>{Math.round(zoom * 100)}%</span><button onClick={() => setZoom(Math.max(1, +(zoom - 0.25).toFixed(2)))}>−</button><button onClick={() => setZoom(1)}>1×</button></div>;
-}
-
-function GameMap({ mode, selected, setSelected, onAction }) {
-  const viewportRef = useRef(null);
-  const pointers = useRef(new Map());
-  const gesture = useRef(null);
-  const [zoom, setZoom] = useState(1);
-  const [camera, setCamera] = useState({ x: 0, y: 0 });
-  const [player, setPlayer] = useState({ x: 12, y: 14, direction: "down" });
-  const [removed, setRemoved] = useState(() => new Set());
-  const [boulder, setBoulder] = useState({ x: 19, y: 19 });
-  const [message, setMessage] = useState("");
-
-  const tiles = useMemo(() => BASE_MAP.flatMap((row, y) => row.map((type, x) => ({ x, y, type: removed.has(key(x, y)) ? "grass" : (boulder.x === x && boulder.y === y ? "rock" : type) }))), [removed, boulder]);
-  const viewport = () => { const el = viewportRef.current; return { w: el?.clientWidth || 800, h: el?.clientHeight || 600 }; };
-  const clamp = (x, y, z = zoom) => { const { w, h } = viewport(); const minX = Math.min(0, w - WORLD_W * z); const minY = Math.min(0, h - WORLD_H * z); return { x: Math.min(0, Math.max(minX, x)), y: Math.min(0, Math.max(minY, y)) }; };
-  const playerCamera = (p = player, z = zoom) => { const { w, h } = viewport(); return { x: w / 2 - (p.x + 0.5) * TILE * z, y: h / 2 - (p.y + 0.5) * TILE * z }; };
-
-  useEffect(() => { setCamera(mode === "player" ? playerCamera() : c => clamp(c.x, c.y)); }, [mode, player.x, player.y, zoom]);
-  useEffect(() => { const resize = () => setCamera(mode === "player" ? playerCamera() : c => clamp(c.x, c.y)); window.addEventListener("resize", resize); return () => window.removeEventListener("resize", resize); }, [mode, player.x, player.y, zoom]);
-
-  function blocked(x, y) {
-    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return true;
-    if (!walkable(BASE_MAP[y][x])) return true;
-    if (boulder.x === x && boulder.y === y) return true;
-    for (const b of BUILDINGS) if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) {
-      const door = x === b.x + Math.floor(b.w / 2) && y === b.y + b.h - 1;
-      if (!door) return true;
-    }
-    return false;
-  }
-
-  function interact(p) {
-    const dx = p.direction === "left" ? -1 : p.direction === "right" ? 1 : 0;
-    const dy = p.direction === "up" ? -1 : p.direction === "down" ? 1 : 0;
-    const tx = p.x + dx, ty = p.y + dy;
-    const object = OBJECTS.find(o => o.x === tx && o.y === ty);
-    const building = BUILDINGS.find(b => tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h);
-    if (object) {
-      setSelected(object.id);
-      if (object.kind === "cut") { const next = new Set(removed); next.add(key(object.x, object.y)); setRemoved(next); setMessage("COUPE : arbre supprimé."); }
-      else if (object.kind === "strength") {
-        const nx = object.x + dx, ny = object.y + dy;
-        if (!blocked(nx, ny)) { setBoulder({ x: nx, y: ny }); setMessage("FORCE : rocher déplacé."); }
-        else setMessage("Le rocher ne peut pas être poussé ici.");
-      } else setMessage(object.text);
-    } else if (building) { setSelected(building.id); setMessage(building.text); }
-    else setMessage("Aucune interaction ici.");
-  }
-
-  useEffect(() => {
-    if (mode !== "player") return;
-    const dirs = { arrowleft: [-1, 0, "left"], q: [-1, 0, "left"], a: [-1, 0, "left"], arrowright: [1, 0, "right"], d: [1, 0, "right"], arrowup: [0, -1, "up"], z: [0, -1, "up"], w: [0, -1, "up"], arrowdown: [0, 1, "down"], s: [0, 1, "down"] };
-    const down = e => {
-      const k = e.key.toLowerCase();
-      if (k === "e") { e.preventDefault(); interact(player); return; }
-      const dir = dirs[k];
-      if (!dir) return;
-      e.preventDefault();
-      const [dx, dy, direction] = dir;
-      setPlayer(p => { const nx = p.x + dx, ny = p.y + dy; return blocked(nx, ny) ? { ...p, direction } : { x: nx, y: ny, direction }; });
-    };
-    window.addEventListener("keydown", down, { passive: false });
-    return () => window.removeEventListener("keydown", down);
-  }, [mode, player, removed, boulder]);
-
-  function pointerDown(e) {
-    if (mode !== "gm") return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.current.size === 1) gesture.current = { type: "pan", x: e.clientX, y: e.clientY, origin: camera };
-    else if (pointers.current.size === 2) { const p = [...pointers.current.values()]; gesture.current = { type: "pinch", distance: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), zoom }; }
-  }
-
-  function pointerMove(e) {
-    if (mode !== "gm" || !pointers.current.has(e.pointerId)) return;
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const p = [...pointers.current.values()];
-    if (p.length === 1 && gesture.current?.type === "pan") { const g = gesture.current; setCamera(clamp(g.origin.x + e.clientX - g.x, g.origin.y + e.clientY - g.y)); }
-    else if (p.length === 2 && gesture.current?.type === "pinch") { const g = gesture.current; const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); setZoom(Math.min(MAX_ZOOM, Math.max(1, +(g.zoom * d / g.distance).toFixed(2)))); }
-  }
-
-  function pointerUp(e) { pointers.current.delete(e.pointerId); if (!pointers.current.size) gesture.current = null; }
-
-  function wheel(e) {
-    if (mode !== "gm") return;
-    e.preventDefault();
-    if (e.ctrlKey) setZoom(z => Math.min(MAX_ZOOM, Math.max(1, +(z + (e.deltaY < 0 ? 0.15 : -0.15)).toFixed(2))));
-    else setCamera(c => clamp(c.x - e.deltaX, c.y - e.deltaY));
-  }
-
-  const pos = mode === "player" ? playerCamera() : camera;
-  return <div className="map-shell"><div className="map-heading"><div><span>MONDE DE JEU</span><strong>BOURG PALETTE · ROUTE 1</strong></div><small>{mode === "gm" ? "MJ · PAN / PINCEMENT / MOLETTE" : "JOUEUR · ZQSD / WASD / FLÈCHES · E"}</small></div>{mode === "gm" && <MapControls zoom={zoom} setZoom={z => { setZoom(z); setCamera(c => clamp(c.x, c.y, z)); }} />}<div ref={viewportRef} className="map-viewport" onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>{message && <div className="map-toast">{message}</div>}<div className="world" style={{ left: pos.x, top: pos.y, width: WORLD_W, height: WORLD_H, transform: `scale(${zoom})` }}><div className="texture-attribution">TUILES ORIGINALES · POKERED</div>{tiles.map(t => <Tile key={`${t.x}-${t.y}`} type={t.type} x={t.x} y={t.y} />)}{BUILDINGS.map(b => <Building key={b.id} building={b} onClick={item => { setSelected(item.id); onAction(item); }} />)}{OBJECTS.map(o => <MapObject key={o.id} object={o} visible={mode === "gm" || !o.hidden} selected={selected === o.id} onClick={item => { setSelected(item.id); onAction(item); }} />)}{mode === "player" && <div className="player" style={{ left: player.x * TILE, top: player.y * TILE }}><RedSprite direction={player.direction} /></div>}</div></div></div>;
-}
-
-function App() {
-  const [mode, setMode] = useState("player");
-  const [selected, setSelected] = useState(null);
-  const [message, setMessage] = useState("");
-  const action = item => setMessage(`${item.title} : ${item.text}`);
-  return <div className={`game ${mode === "gm" ? "gm-mode" : "player-mode"}`}><Header mode={mode} setMode={setMode} /><main className="layout"><GameMap mode={mode} selected={selected} setSelected={setSelected} onAction={action} /><SidePanel mode={mode} selected={selected} onAction={action} /></main>{message && <button className="global-message" onClick={() => setMessage("")}>{message}</button>}</div>;
-}
-
-createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);
+function Header({mode,setMode}){return <header className="topbar"><div className="brand"><div className="pokeball-logo"><span/></div><div><strong>POKÉMON JDR</strong><small>GEN I · CARTE INTERACTIVE</small></div></div><div className="mode-switch"><button className={mode==="player"?"active":""} onClick={()=>setMode("player")}>JOUEUR</button><button className={mode==="gm"?"active gm":""} onClick={()=>setMode("gm")}>MJ</button></div></header>}
+function RedSprite({direction="down"}){const row={down:0,up:1,left:2,right:3}[direction]??0;return <span className="red-sprite" style={{backgroundImage:`url(${RED})`,backgroundPosition:`0 -${row*32}px`}}/>}
+function Tile({type,x,y,removed}){if(removed)return null;const [px,py]=POS[type]||POS.grass;return <div className={`tile tile-${type}`} style={{left:x*TILE,top:y*TILE,backgroundImage:`url(${TILESET})`,backgroundPosition:`${px}px ${py}px`}}/>}
+function Building({b,onSelect}){const label=b.id==="lab"?"LAB":b.id==="center"?"P.C.":b.id==="mart"?"SHOP":"HOUSE";return <button className={`building building-${b.id}`} style={{left:b.x*TILE,top:b.y*TILE,width:b.w*TILE,height:b.h*TILE}} onClick={()=>onSelect(b)}><span>{label}</span><i/></button>}
+function MapObject({o,visible,selected,onSelect}){if(!visible)return null;const body=o.sprite?<img src={o.sprite} alt=""/>:o.kind==="npc"?<RedSprite/>:<span className={`object-icon icon-${o.kind}`}/>;return <button className={`map-object object-${o.kind} ${selected?"selected":""}`} style={{left:o.x*TILE,top:o.y*TILE}} onClick={()=>onSelect(o)} title={o.name}>{body}<b>{o.kind==="wild"?"?":o.kind==="cut"?"COUPE":o.kind==="strength"?"FORCE":o.kind==="npc"?"PNJ":""}</b></button>}
+function SidePanel({mode,selected,message,onAction}){const item=[...OBJECTS,...BUILDINGS].find(x=>x.id===selected);return <aside className="side-panel"><div className="panel-title">{mode==="gm"?"MJ · CARTE":"JOUEUR · EXPLORATION"}</div>{item?<div className="interaction"><span className={`kind kind-${item.kind||"building"}`}>{(item.kind||"building").toUpperCase()}</span><h2>{item.name}</h2><p>{item.text||"Lieu de la carte."}</p>{mode==="gm"&&item.kind==="npc"&&<div className="stats"><span>ÉQUIPE</span><strong>À définir</strong><span>NIVEAU</span><strong>À définir</strong><span>PV</span><strong>À définir</strong></div>}<button className="action" onClick={()=>onAction(item)}>{mode==="gm"?"OUVRIR":"INTERAGIR"}</button></div>:<div className="panel-empty"><strong>Carte Gen I</strong><p>{mode==="gm"?"Cliquez sur un élément pour l'inspecter.":"ZQSD / WASD / flèches pour marcher. E pour interagir."}</p></div>}{message&&<div className="panel-message">{message}</div>}</aside>}
+function Controls({zoom,setZoom}){return <div className="controls"><button onClick={()=>setZoom(z=>Math.min(MAX_ZOOM,+(z+.25).toFixed(2)))}>+</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(z=>Math.max(1,+(z-.25).toFixed(2)))}>−</button><button onClick={()=>setZoom(1)}>1×</button></div>}
+function GameMap({mode,selected,setSelected,setMessage}){const viewportRef=useRef(null),pointers=useRef(new Map()),gesture=useRef(null);const [zoom,setZoom]=useState(1),[camera,setCamera]=useState({x:0,y:0}),[player,setPlayer]=useState({x:14,y:16,direction:"down"}),[removed,setRemoved]=useState(new Set()),[boulder,setBoulder]=useState({x:22,y:20});
+const viewport=()=>({w:viewportRef.current?.clientWidth||800,h:viewportRef.current?.clientHeight||600});const clamp=(x,y,z=zoom)=>{const {w,h}=viewport(),minX=Math.min(0,w-WORLD_W*z),minY=Math.min(0,h-WORLD_H*z);return{x:Math.min(0,Math.max(minX,x)),y:Math.min(0,Math.max(minY,y))}};const center=(p=player,z=zoom)=>{const{w,h}=viewport();return{x:w/2-(p.x+.5)*TILE*z,y:h/2-(p.y+.5)*TILE*z}};
+useEffect(()=>setCamera(mode==="player"?center():c=>clamp(c.x,c.y)),[mode,player.x,player.y,zoom]);useEffect(()=>{const r=()=>setCamera(mode==="player"?center():c=>clamp(c.x,c.y));window.addEventListener("resize",r);return()=>window.removeEventListener("resize",r)},[mode,player.x,player.y,zoom]);
+function blocked(x,y){if(x<0||y<0||x>=COLS||y>=ROWS)return true;if(["tree","water"].includes(MAP[y][x]))return true;if(boulder.x===x&&boulder.y===y)return true;for(const b of BUILDINGS)if(x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h){const door=x===b.x+Math.floor(b.w/2)&&y===b.y+b.h-1;if(!door)return true}return false}
+function interact(p){const[dX,dY]=DELTA[p.direction],tx=p.x+dX,ty=p.y+dY,o=OBJECTS.find(v=>v.x===tx&&v.y===ty),b=BUILDINGS.find(v=>tx>=v.x&&tx<v.x+v.w&&ty>=v.y&&ty<v.y+v.h);if(o){setSelected(o.id);if(o.kind==="cut"){setRemoved(s=>new Set([...s,`${o.x}:${o.y}`]));setMessage("COUPE : l'arbre a été retiré.")}else if(o.kind==="strength"){const nx=o.x+dX,ny=o.y+dY;if(!blocked(nx,ny)){setBoulder({x:nx,y:ny});setMessage("FORCE : le rocher a été poussé.")}else setMessage("Impossible de pousser le rocher ici.")}else setMessage(o.text)}else if(b){setSelected(b.id);setMessage(b.name)}else setMessage("Rien à faire ici.")}
+useEffect(()=>{if(mode!=="player")return;const dirs={z:[0,-1,"up"],w:[0,-1,"up"],arrowup:[0,-1,"up"],q:[-1,0,"left"],a:[-1,0,"left"],arrowleft:[-1,0,"left"],s:[0,1,"down"],arrowdown:[0,1,"down"],d:[1,0,"right"],arrowright:[1,0,"right"]};const down=e=>{const key=e.key.toLowerCase();if(key==="e"){e.preventDefault();interact(player);return}const dir=dirs[key];if(!dir)return;e.preventDefault();const[dx,dy,face]=dir;setPlayer(p=>{const nx=p.x+dx,ny=p.y+dy;return blocked(nx,ny)?{...p,direction:face}:{x:nx,y:ny,direction:face}})};window.addEventListener("keydown",down,{passive:false});return()=>window.removeEventListener("keydown",down)},[mode,player,boulder,removed]);
+function pointerDown(e){if(mode!=="gm")return;e.currentTarget.setPointerCapture(e.pointerId);pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.current.size===1)gesture.current={type:"pan",x:e.clientX,y:e.clientY,origin:camera};if(pointers.current.size===2){const p=[...pointers.current.values()];gesture.current={type:"pinch",distance:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),zoom}}}function pointerMove(e){if(mode!=="gm"||!pointers.current.has(e.pointerId))return;pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});const p=[...pointers.current.values()];if(p.length===1&&gesture.current?.type==="pan"){const g=gesture.current;setCamera(clamp(g.origin.x+e.clientX-g.x,g.origin.y+e.clientY-g.y))}else if(p.length===2&&gesture.current?.type==="pinch"){const g=gesture.current,d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);setZoom(Math.min(MAX_ZOOM,Math.max(1,+(g.zoom*d/g.distance).toFixed(2))))}}function pointerUp(e){pointers.current.delete(e.pointerId);if(!pointers.current.size)gesture.current=null}function wheel(e){if(mode!=="gm")return;e.preventDefault();if(e.ctrlKey)setZoom(z=>Math.min(MAX_ZOOM,Math.max(1,+(z+(e.deltaY<0?.15:-.15)).toFixed(2))));else setCamera(c=>clamp(c.x-e.deltaX,c.y-e.deltaY))}
+const tiles=useMemo(()=>MAP.flatMap((row,y)=>row.map((type,x)=><Tile key={`${x}-${y}`} type={type} x={x} y={y} removed={removed.has(`${x}:${y}`)||(boulder.x===x&&boulder.y===y)}/>)),[removed,boulder]);return <div className="map-shell"><div className="map-heading"><div><span>CARTE INTERACTIVE</span><strong>BOURG PALETTE · GEN I</strong></div><small>{mode==="gm"?"MJ · PAN + ZOOM":"JOUEUR · CAMÉRA CENTRÉE"}</small></div>{mode==="gm"&&<Controls zoom={zoom} setZoom={setZoom}/>}<div ref={viewportRef} className="map-viewport" onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}><div className="world" style={{width:WORLD_W,height:WORLD_H,transform:`translate3d(${camera.x}px,${camera.y}px,0) scale(${zoom})`}}>{tiles}{BUILDINGS.map(b=><Building key={b.id} b={b} onSelect={v=>{setSelected(v.id);setMessage(v.name)}}/>)}{OBJECTS.map(o=><MapObject key={o.id} o={o} visible={mode==="gm"||o.kind!=="wild"} selected={selected===o.id} onSelect={v=>{setSelected(v.id);setMessage(v.text)}}/>)}<div className="player" style={{left:player.x*TILE,top:player.y*TILE}}><RedSprite direction={player.direction}/></div></div></div><div className="map-hint">{mode==="gm"?"Souris : glisser · molette : déplacer · Ctrl+molette : zoom · tactile : 1 doigt = pan, 2 doigts = zoom":"ZQSD / WASD / flèches · E = interaction"}</div></div>}
+function App(){const[mode,setMode]=useState("player"),[selected,setSelected]=useState(null),[message,setMessage]=useState("");return <div className="game"><Header mode={mode} setMode={setMode}/><main className="layout"><GameMap mode={mode} selected={selected} setSelected={setSelected} setMessage={setMessage}/><SidePanel mode={mode} selected={selected} message={message} onAction={item=>setMessage(item.text||item.name)}/></main></div>}
+createRoot(document.getElementById("root")).render(<React.StrictMode><App/></React.StrictMode>);
