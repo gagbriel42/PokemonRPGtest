@@ -1,106 +1,90 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-const MAP_IMAGE = "https://blog.vjeux.com/wp-content/uploads/2023/12/pokemon_blue-1.png";
-const MAP_WIDTH = 7200;
-const MAP_HEIGHT = 7200;
-const GM_FIT_SCALE = 0.09;
-const PLAYER_SCALE = 0.42;
-const MAX_GM_ZOOM = 5;
+const COLS = 36;
+const ROWS = 26;
+const TILE = 32;
+const WORLD_W = COLS * TILE;
+const WORLD_H = ROWS * TILE;
+const MAX_ZOOM = 4;
 
-const VERSION_INFO = {
-  red: { label: "ROUGE", color: "#b83a3a", title: "Pokémon Rouge", details: ["Palette Rouge/Vert et rencontres Rouge.", "Exclusivités Rouge disponibles dans les tables du JDR."] },
-  blue: { label: "BLEU", color: "#3b73b9", title: "Pokémon Bleu", details: ["Palette Bleu et rencontres Bleu.", "Exclusivités Bleu disponibles dans les tables du JDR."] },
-  yellow: { label: "JAUNE", color: "#c5a72a", title: "Pokémon Jaune", details: ["Éléments et événements propres à Jaune."] },
-  green: { label: "VERT JP", color: "#4d8b5a", title: "Pokémon Vert japonais", details: ["Différences historiques Red/Green."] },
+const SPRITES = {
+  red: "https://raw.githubusercontent.com/pret/pokered/master/gfx/sprites/red.png",
+  pikachu: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/25.png",
+  rattata: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/19.png",
+  bulbasaur: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/front_transparent/1.png",
 };
 
-const LOCATIONS = [
-  ["BOURG PALETTE", 12, 77], ["JADIELLE", 23, 65], ["ARGENTA", 31, 45], ["AZURIA", 52, 35],
-  ["CARMIN-SUR-MER", 52, 61], ["LAVANVILLE", 68, 55], ["CÉLADOPOLE", 48, 62], ["SAFRANIA", 64, 48],
-  ["PARMANIE", 67, 73], ["CRAMOIS'ÎLE", 43, 89], ["PLATEAU INDIGO", 27, 14],
+const BASE_MAP = Array.from({ length: ROWS }, (_, y) => Array.from({ length: COLS }, (_, x) => {
+  if (x < 2 || x > COLS - 3 || y < 2 || y > ROWS - 3) return "tree";
+  if (x >= 15 && x <= 18 && y >= 2 && y <= 23) return "water";
+  if (x >= 16 && x <= 17 && y >= 10 && y <= 15) return "bridge";
+  if ((x >= 5 && x <= 30 && y >= 11 && y <= 13) || (x >= 15 && x <= 18)) return "path";
+  if (x >= 4 && x <= 10 && y >= 4 && y <= 9) return "grass";
+  if (x >= 23 && x <= 31 && y >= 17 && y <= 22) return "tallgrass";
+  if ((x + y) % 17 === 0 && y > 3 && y < 22) return "flower";
+  return "grass";
+}));
+
+const BUILDINGS = [
+  { id: "house", x: 5, y: 5, w: 5, h: 4, title: "Maison du joueur", text: "Entrée vers l'intérieur de la maison." },
+  { id: "lab", x: 25, y: 5, w: 6, h: 5, title: "Laboratoire du Professeur", text: "Bâtiment important : dialogue, starter et événements MJ." },
+  { id: "center", x: 5, y: 17, w: 6, h: 4, title: "Centre Pokémon", text: "Soins de l'équipe et futur accès à l'intérieur du Centre Pokémon." },
+  { id: "mart", x: 25, y: 17, w: 5, h: 4, title: "Boutique", text: "Achats d'objets. Le MJ pourra modifier le stock." },
 ];
 
-const INTERACTABLES = [
-  { id: "oak", x: 12, y: 77, kind: "npc", title: "Professeur Chen", text: "Un PNJ majeur. Le MJ peut remplacer son équipe, son dialogue et ses statistiques." },
-  { id: "pallet-center", x: 13.5, y: 76, kind: "building", title: "Bâtiment — Bourg Palette", text: "Entrée de bâtiment. Dans la version JDR, cette interaction ouvrira la carte intérieure correspondante." },
-  { id: "route1-grass", x: 17, y: 71, kind: "grass", title: "Hautes herbes", text: "Zone de rencontre sauvage. Le joueur voit uniquement les herbes ; le MJ voit les rencontres présentes." },
-  { id: "cut-tree", x: 20, y: 67, kind: "cut", title: "Arbre à couper", text: "Obstacle interactif : nécessite la capacité COUPE. Le MJ peut activer ou désactiver l'obstacle." },
-  { id: "viridian-npc", x: 23, y: 65, kind: "npc", title: "PNJ de Jadielle", text: "PNJ sélectionnable par le MJ : dialogue, niveau, équipe et statistiques seront attachés à cette fiche." },
-  { id: "boulder", x: 37, y: 49, kind: "strength", title: "Rocher poussable", text: "Obstacle de type FORCE. Il pourra être déplacé sur la grille lorsque FORCE sera disponible." },
-  { id: "forest", x: 28, y: 52, kind: "grass", title: "Forêt / hautes herbes", text: "Zone exploratoire avec rencontres sauvages. Les Pokémon cachés restent invisibles pour le joueur." },
-  { id: "cerulean-npc", x: 52, y: 35, kind: "npc", title: "PNJ d'Azuria", text: "Fiche PNJ prête à recevoir dialogue, équipe, niveau et statistiques." },
-  { id: "water", x: 55, y: 42, kind: "water", title: "Eau", text: "Surface infranchissable à pied. Une future interaction SURF permettra le déplacement sur l'eau." },
-  { id: "saffron-door", x: 64, y: 48, kind: "building", title: "Entrée de bâtiment", text: "Interaction de porte : ouvrira la zone intérieure liée au bâtiment." },
-  { id: "power-boulder", x: 68, y: 55, kind: "strength", title: "Rocher bloquant", text: "Obstacle nécessitant FORCE. Le MJ pourra le déplacer ou le supprimer." },
-  { id: "safari-grass", x: 67, y: 73, kind: "grass", title: "Hautes herbes — Parc Safari", text: "Zone de rencontre sauvage spéciale. Les rencontres seront tirées selon la table de la zone." },
-  { id: "cinnabar-door", x: 43, y: 89, kind: "building", title: "Bâtiment de Cramois'Île", text: "Porte interactive vers une future carte intérieure." },
+const OBJECTS = [
+  { id: "oak", x: 22, y: 7, kind: "npc", title: "Professeur Chen", text: "PNJ Gen I. Le MJ peut ouvrir sa fiche, son dialogue et son équipe.", sprite: "red" },
+  { id: "rival", x: 12, y: 11, kind: "npc", title: "Rival", text: "PNJ mobile. Sa position et son équipe peuvent être modifiées par le MJ.", sprite: "red" },
+  { id: "cut", x: 12, y: 8, kind: "cut", title: "Arbre à couper", text: "Bloque le passage. Nécessite COUPE. Une fois coupé, il disparaît pour cette partie." },
+  { id: "boulder", x: 20, y: 19, kind: "strength", title: "Rocher poussable", text: "Nécessite FORCE. Le rocher peut être déplacé case par case." },
+  { id: "sign", x: 13, y: 13, kind: "sign", title: "Panneau", text: "Route 1 — Bourg Palette / Jadielle." },
+  { id: "pikachu", x: 27, y: 19, kind: "wild", title: "Pikachu caché", text: "Rencontre sauvage. Invisible pour le joueur, visible par le MJ.", sprite: "pikachu", hidden: true },
+  { id: "rattata", x: 29, y: 20, kind: "wild", title: "Rattata caché", text: "Rencontre sauvage. Invisible pour le joueur, visible par le MJ.", sprite: "rattata", hidden: true },
+  { id: "bulbasaur", x: 8, y: 7, kind: "wild", title: "Bulbizarre caché", text: "Exemple de rencontre MJ dans une zone d'herbes.", sprite: "bulbasaur", hidden: true },
 ];
 
-function Header({ mode, setMode }) {
-  return <header className="topbar"><div className="brand"><div className="pokeball-logo"><span /></div><div><strong>POKÉMON JDR</strong><small>GÉNÉRATION I · KANTO</small></div></div><div className="mode-switch"><button className={mode === "player" ? "active" : ""} onClick={() => setMode("player")}>JOUEUR</button><button className={mode === "gm" ? "active gm" : ""} onClick={() => setMode("gm")}>MJ</button></div></header>;
+function tileWalkable(type) { return !["tree", "water", "house", "lab", "center", "mart"].includes(type); }
+function key(x, y) { return `${x}:${y}`; }
+function buildTiles(removed, boulder) { return BASE_MAP.map((row, y) => row.map((type, x) => ({ x, y, type: removed.has(key(x, y)) ? "grass" : (boulder.x === x && boulder.y === y ? "rock" : type) }))); }
+
+function Header({ mode, setMode }) { return <header className="topbar"><div className="brand"><div className="pokeball-logo"><span /></div><div><strong>POKÉMON JDR</strong><small>GÉNÉRATION I · CARTE INTERACTIVE</small></div></div><div className="mode-switch"><button className={mode === "player" ? "active" : ""} onClick={() => setMode("player")}>JOUEUR</button><button className={mode === "gm" ? "active gm" : ""} onClick={() => setMode("gm")}>MJ</button></div></header>; }
+function Tile({ tile }) { return <div className={`tile tile-${tile.type}`} style={{ left: tile.x * TILE, top: tile.y * TILE }} />; }
+function Building({ building, onInteract }) { return <button className={`building building-${building.id}`} style={{ left: building.x * TILE, top: building.y * TILE, width: building.w * TILE, height: building.h * TILE }} onClick={() => onInteract(building.id)} title={building.title}><span>{building.id === "lab" ? "LAB" : building.id === "center" ? "P.C." : building.id === "mart" ? "SHOP" : "HOUSE"}</span><i /></button>; }
+function ObjectSprite({ object, visible, selected, onInteract }) { if (!visible) return null; const icon = object.sprite ? <img src={SPRITES[object.sprite]} alt="" /> : <span className={`object-icon icon-${object.kind}`} />; return <button className={`map-object object-${object.kind} ${selected ? "selected" : ""}`} style={{ left: object.x * TILE, top: object.y * TILE }} onClick={() => onInteract(object.id)} title={object.title}>{icon}<b>{object.kind === "npc" ? "PNJ" : object.kind === "wild" ? "?" : object.kind === "cut" ? "COUPE" : object.kind === "strength" ? "FORCE" : ""}</b></button>; }
+
+function InteractionPanel({ selected, mode, onAction }) {
+  const item = [...OBJECTS, ...BUILDINGS].find(x => x.id === selected);
+  if (!item) return <aside className="side-panel"><div className="panel-title">{mode === "gm" ? "MJ · OUTILS" : "JOUEUR · AIDE"}</div><div className="panel-empty"><strong>Carte interactive</strong><p>{mode === "gm" ? "Sélectionnez un PNJ, une rencontre, un obstacle ou un bâtiment." : "Déplacez-vous avec ZQSD, WASD ou les flèches. Approchez-vous d'un objet puis appuyez sur E."}</p></div></aside>;
+  return <aside className="side-panel"><div className="panel-title">{mode === "gm" ? "MJ · ÉLÉMENT SÉLECTIONNÉ" : "INTERACTION"}</div><div className="interaction"><span className={`kind kind-${item.kind || "building"}`}>{(item.kind || "building").toUpperCase()}</span><h2>{item.title}</h2><p>{item.text}</p>{mode === "gm" && item.kind === "npc" && <div className="stats"><span>ÉQUIPE</span><strong>À définir</strong><span>NIVEAU</span><strong>À définir</strong><span>PV</span><strong>À définir</strong></div>}<button className="action" onClick={() => onAction(item)}>{mode === "gm" ? "OUVRIR LA FICHE MJ" : "INTERAGIR"}</button></div></aside>;
+}
+function MapControls({ zoom, setZoom }) { return <div className="controls"><button onClick={() => setZoom(Math.min(MAX_ZOOM, +(zoom + .25).toFixed(2)))}>+</button><span>{Math.round(zoom * 100)}%</span><button onClick={() => setZoom(Math.max(1, +(zoom - .25).toFixed(2)))}>−</button><button onClick={() => setZoom(1)}>1×</button></div>; }
+
+function GameMap({ mode, selected, setSelected, onAction }) {
+  const viewportRef = useRef(null); const pointers = useRef(new Map()); const gesture = useRef(null);
+  const [zoom, setZoom] = useState(1); const [camera, setCamera] = useState({ x: 0, y: 0 }); const [player, setPlayer] = useState({ x: 14, y: 14 });
+  const [removed, setRemoved] = useState(() => new Set()); const [boulder, setBoulder] = useState({ x: 20, y: 19 }); const [message, setMessage] = useState("");
+  const tiles = useMemo(() => buildTiles(removed, boulder), [removed, boulder]);
+  const viewport = () => { const el = viewportRef.current; return { w: el?.clientWidth || 800, h: el?.clientHeight || 600 }; };
+  const clamp = (x, y, z = zoom) => { const { w, h } = viewport(); const minX = Math.min(0, w - WORLD_W * z); const minY = Math.min(0, h - WORLD_H * z); return { x: Math.min(0, Math.max(minX, x)), y: Math.min(0, Math.max(minY, y)) }; };
+  const playerCamera = (p = player) => { const { w, h } = viewport(); return { x: w / 2 - (p.x + .5) * TILE * zoom, y: h / 2 - (p.y + .5) * TILE * zoom }; };
+  useEffect(() => { if (mode === "player") setCamera(playerCamera()); else setCamera(c => clamp(c.x, c.y)); }, [player.x, player.y, mode, zoom]);
+  useEffect(() => { const f = () => setCamera(mode === "player" ? playerCamera() : clamp(camera.x, camera.y)); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, [mode, player.x, player.y, zoom]);
+
+  function blocked(x, y) { if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return true; if (!tileWalkable(BASE_MAP[y][x])) return true; if (boulder.x === x && boulder.y === y) return true; for (const b of BUILDINGS) if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) { const door = x === b.x + Math.floor(b.w / 2) && y === b.y + b.h - 1; if (!door) return true; } return false; }
+  function interactNearby(p) { const near = OBJECTS.find(o => Math.abs(o.x - p.x) <= 1 && Math.abs(o.y - p.y) <= 1); if (!near) { setMessage("Aucune interaction à proximité."); return; } setSelected(near.id); if (near.kind === "cut") { const next = new Set(removed); next.add(key(near.x, near.y)); setRemoved(next); setMessage("COUPE : l'arbre a été retiré."); } else if (near.kind === "strength") { const nx = near.x + 1; if (!blocked(nx, near.y)) { setBoulder({ x: nx, y: near.y }); setMessage("FORCE : le rocher a été déplacé d'une case."); } else setMessage("Le rocher ne peut pas être poussé ici."); } else setMessage(near.text); }
+  useEffect(() => { if (mode !== "player") return; const down = e => { const k = e.key.toLowerCase(); const dirs = { arrowleft: [-1,0], q: [-1,0], a: [-1,0], arrowright: [1,0], d: [1,0], arrowup: [0,-1], z: [0,-1], w: [0,-1], arrowdown: [0,1], s: [0,1] }; if (k === "e") { e.preventDefault(); interactNearby(player); return; } if (!dirs[k]) return; e.preventDefault(); const [dx,dy] = dirs[k]; const nx = player.x + dx, ny = player.y + dy; if (!blocked(nx,ny)) setPlayer({ x:nx, y:ny }); }; window.addEventListener("keydown", down, { passive:false }); return () => window.removeEventListener("keydown", down); }, [mode, player, removed, boulder]);
+
+  function pointerDown(e) { if (mode !== "gm") return; e.currentTarget.setPointerCapture(e.pointerId); pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY}); if (pointers.current.size === 1) gesture.current={type:"pan",x:e.clientX,y:e.clientY,origin:camera}; else if (pointers.current.size === 2) { const p=[...pointers.current.values()]; gesture.current={type:"pinch",distance:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),zoom,origin:camera}; } }
+  function pointerMove(e) { if (mode !== "gm" || !pointers.current.has(e.pointerId)) return; pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY}); const p=[...pointers.current.values()]; if (p.length === 1 && gesture.current?.type === "pan") { const g=gesture.current; setCamera(clamp(g.origin.x+e.clientX-g.x,g.origin.y+e.clientY-g.y)); } else if (p.length === 2 && gesture.current?.type === "pinch") { const g=gesture.current; const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y); setZoom(Math.min(MAX_ZOOM,Math.max(1,+(g.zoom*d/g.distance).toFixed(2)))); } }
+  function pointerUp(e) { pointers.current.delete(e.pointerId); if (!pointers.current.size) gesture.current=null; }
+  function wheel(e) { if (mode !== "gm") return; e.preventDefault(); if (e.ctrlKey) setZoom(z=>Math.min(MAX_ZOOM,Math.max(1,+(z+(e.deltaY<0?.15:-.15)).toFixed(2)))); else setCamera(c=>clamp(c.x-e.deltaX,c.y-e.deltaY)); }
+
+  const pos = mode === "player" ? playerCamera() : camera;
+  return <div className="map-shell"><div className="map-heading"><div><span>MONDE DE JEU</span><strong>BOURG PALETTE · ROUTE 1</strong></div><small>{mode === "gm" ? "MJ · 1 DOIGT / SOURIS = PAN · 2 DOIGTS = PAN + PINCEMENT" : "JOUEUR · ZQSD / WASD / FLÈCHES · E = INTERAGIR"}</small></div>{mode === "gm" && <MapControls zoom={zoom} setZoom={z=>{setZoom(z);setCamera(c=>clamp(c.x,c.y,z));}} />}<div ref={viewportRef} className="map-viewport" onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>{message && <div className="map-toast">{message}</div>}<div className="world" style={{left:pos.x,top:pos.y,width:WORLD_W,height:WORLD_H,transform:`scale(${zoom})`}}>{tiles.flat().map(t=><Tile tile={t} key={`${t.x}-${t.y}`} />)}{BUILDINGS.map(b=><Building key={b.id} building={b} onInteract={id=>{setSelected(id);setMessage(BUILDINGS.find(x=>x.id===id).text);}}/>)}{OBJECTS.map(o=><ObjectSprite key={o.id} object={o} visible={o.kind!=="wild"||mode==="gm"} selected={selected===o.id} onInteract={id=>{setSelected(id);setMessage(OBJECTS.find(x=>x.id===id).text);}}/>)}<div className="player" style={{left:player.x*TILE,top:player.y*TILE}}><img src={SPRITES.red} alt="Dresseur"/><span>VOUS</span></div></div></div></div>;
 }
 
-function VersionLegend({ enabled, setEnabled }) {
-  return <div className="version-legend"><div className="legend-title">COUCHES GEN I</div>{Object.entries(VERSION_INFO).map(([id, info]) => <button key={id} className={`version-chip ${enabled[id] ? "on" : ""}`} style={{ "--version-color": info.color }} onClick={() => setEnabled(v => ({ ...v, [id]: !v[id] }))}><span className="version-dot" />{info.label}</button>)}</div>;
-}
+function App(){ const [mode,setMode]=useState("player"); const [selected,setSelected]=useState(null); const [message,setMessage]=useState(""); const action=item=>setMessage(`${item.title} : interaction JDR activée.`); return <div className={`game ${mode=== "gm" ? "gm-mode":"player-mode"}`}><Header mode={mode} setMode={setMode}/><main className="layout"><section><GameMap mode={mode} selected={selected} setSelected={setSelected} onAction={action}/></section><InteractionPanel selected={selected} mode={mode} onAction={action}/></main>{message&&<div className="global-message" onClick={()=>setMessage("")}>{message}</div>}</div>; }
 
-function VersionPanel({ enabled, selected }) {
-  const active = Object.entries(enabled).filter(([, on]) => on).map(([id]) => VERSION_INFO[id]);
-  const item = INTERACTABLES.find(x => x.id === selected);
-  return <aside className="gm-panel"><div className="panel-title">MJ · CARTE ET INTERACTIONS</div>{item && <div className="interaction-card"><div className="interaction-kind">{item.kind.toUpperCase()}</div><strong>{item.title}</strong><p>{item.text}</p><div className="interaction-actions"><button>MODIFIER</button><button>FICHE</button></div></div>}<div className="panel-title secondary">COUCHES DE VERSION</div>{active.map(v => <div className="version-card" key={v.label} style={{ "--version-color": v.color }}><div className="version-card-title"><span className="version-dot" />{v.title}</div>{v.details.map(d => <p key={d}>{d}</p>)}</div>)}<div className="gm-message"><strong>Interactions actives</strong><p>Cliquer un élément sélectionne son type. Les hautes herbes, PNJ, portes, arbres COUPE et rochers FORCE sont maintenant représentés comme objets de jeu, prêts à être reliés aux données des cartes Gen I.</p></div></aside>;
-}
-
-function GameMap({ mode, enabled, onSelect, selected }) {
-  const viewportRef = useRef(null);
-  const pointers = useRef(new Map());
-  const gesture = useRef(null);
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [player, setPlayer] = useState({ x: 12, y: 77 });
-
-  const scale = mode === "gm" ? GM_FIT_SCALE * zoom : PLAYER_SCALE;
-  const size = () => { const e = viewportRef.current; return { w: e?.clientWidth || 720, h: e?.clientHeight || 560 }; };
-  const clamp = (x, y, s = scale) => { const { w, h } = size(); const minX = Math.min(0, w - MAP_WIDTH * s); const minY = Math.min(0, h - MAP_HEIGHT * s); return { x: Math.min(0, Math.max(minX, x)), y: Math.min(0, Math.max(minY, y)) }; };
-  const playerCamera = () => { const { w, h } = size(); return { x: w / 2 - MAP_WIDTH * player.x / 100 * scale, y: h / 2 - MAP_HEIGHT * player.y / 100 * scale }; };
-  const setZoomAt = (value, cx, cy) => { const next = Math.min(MAX_GM_ZOOM, Math.max(1, value)); setZoom(prev => { const contentX = (cx - offset.x) / prev; const contentY = (cy - offset.y) / prev; setOffset(clamp(cx - contentX * next, cy - contentY * next, GM_FIT_SCALE * next)); return next; }); };
-  const zoomBy = (delta, cx, cy) => setZoomAt(zoom + delta, cx, cy);
-
-  useEffect(() => { const onResize = () => mode === "gm" && setOffset(o => clamp(o.x, o.y, GM_FIT_SCALE * zoom)); window.addEventListener("resize", onResize); return () => window.removeEventListener("resize", onResize); }, [mode, zoom]);
-  useEffect(() => { if (mode === "gm") setOffset(clamp(0, 0, GM_FIT_SCALE)); }, [mode]);
-
-  useEffect(() => {
-    if (mode !== "player") return;
-    const keys = new Set();
-    const down = e => { const k = e.key.toLowerCase(); if (["arrowleft", "arrowright", "arrowup", "arrowdown", "z", "q", "s", "d", "w", "a", "e"].includes(k)) e.preventDefault(); keys.add(k); };
-    const up = e => keys.delete(e.key.toLowerCase());
-    window.addEventListener("keydown", down, { passive: false }); window.addEventListener("keyup", up);
-    let raf;
-    const tick = () => { let dx = 0, dy = 0; if (keys.has("arrowleft") || keys.has("q") || keys.has("a")) dx -= .08; if (keys.has("arrowright") || keys.has("d")) dx += .08; if (keys.has("arrowup") || keys.has("z") || keys.has("w")) dy -= .08; if (keys.has("arrowdown") || keys.has("s")) dy += .08; if (dx || dy) setPlayer(p => ({ x: Math.max(0, Math.min(100, p.x + dx)), y: Math.max(0, Math.min(100, p.y + dy)) })); if (keys.has("e")) { const near = nearestInteractable(player); if (near) onSelect(near.id); } raf = requestAnimationFrame(tick); };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [mode, player]);
-
-  function nearestInteractable(p) { let best = null, dist = Infinity; for (const item of INTERACTABLES) { const d = Math.hypot(item.x - p.x, item.y - p.y); if (d < 3.2 && d < dist) { best = item; dist = d; } } return best; }
-  function pointDistance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-  function pointCenter(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
-  function onPointerDown(e) { if (mode !== "gm") return; e.currentTarget.setPointerCapture(e.pointerId); pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.current.size === 1) gesture.current = { type: "pan", start: { x: e.clientX, y: e.clientY }, origin: { ...offset } }; else { const pts = [...pointers.current.values()]; gesture.current = { type: "pinch", distance: pointDistance(pts[0], pts[1]), center: pointCenter(pts[0], pts[1]), zoom, origin: { ...offset } }; } }
-  function onPointerMove(e) { if (mode !== "gm" || !pointers.current.has(e.pointerId)) return; pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.current.size === 1 && gesture.current?.type === "pan") { const g = gesture.current; setOffset(clamp(g.origin.x + e.clientX - g.start.x, g.origin.y + e.clientY - g.start.y)); } else if (pointers.current.size === 2) { const pts = [...pointers.current.values()]; const g = gesture.current; if (!g || g.type !== "pinch") return; const d = pointDistance(pts[0], pts[1]); const c = pointCenter(pts[0], pts[1]); const next = Math.min(MAX_GM_ZOOM, Math.max(1, g.zoom * d / g.distance)); const contentX = (g.center.x - g.origin.x) / g.zoom; const contentY = (g.center.y - g.origin.y) / g.zoom; setZoom(next); setOffset(clamp(c.x - contentX * next, c.y - contentY * next, GM_FIT_SCALE * next)); } }
-  function onPointerUp(e) { pointers.current.delete(e.pointerId); if (!pointers.current.size) gesture.current = null; else if (pointers.current.size === 1) { const p = [...pointers.current.values()][0]; gesture.current = { type: "pan", start: { x: p.x, y: p.y }, origin: { ...offset } }; } }
-  function onWheel(e) { if (mode !== "gm") return; e.preventDefault(); const rect = viewportRef.current.getBoundingClientRect(); const cx = e.clientX - rect.left, cy = e.clientY - rect.top; if (e.ctrlKey || Math.abs(e.deltaY) > Math.abs(e.deltaX)) zoomBy(e.deltaY < 0 ? .25 : -.25, cx, cy); else setOffset(o => clamp(o.x - e.deltaX, o.y - e.deltaY)); }
-
-  const pos = mode === "gm" ? offset : playerCamera();
-  const markers = VERSION_INFO;
-  const near = nearestInteractable(player);
-  return <div className="map-shell"><div className="map-heading"><div><span>CARTE DU MONDE</span><strong>KANTO · GEN I · HAUTE RÉSOLUTION</strong></div><small>{mode === "gm" ? "MJ · PAN + ZOOM + INTERACTIONS" : "JOUEUR · EXPLORATION + INTERACTIONS"}</small></div>{mode === "gm" && <div className="map-zoom-controls"><button onClick={() => zoomBy(.25, (viewportRef.current?.clientWidth || 720) / 2, (viewportRef.current?.clientHeight || 560) / 2)}>+</button><span>{Math.round(zoom * 100)}%</span><button onClick={() => zoomBy(-.25, (viewportRef.current?.clientWidth || 720) / 2, (viewportRef.current?.clientHeight || 560) / 2)}>−</button><button onClick={() => { setZoom(1); setOffset(clamp(0, 0, GM_FIT_SCALE)); }}>1×</button></div>}<div ref={viewportRef} className={`map-viewport ${mode === "gm" ? "interactive" : "player-camera"}`} onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}><div className="full-kanto-map" style={{ left: `${pos.x}px`, top: `${pos.y}px`, width: `${MAP_WIDTH}px`, height: `${MAP_HEIGHT}px`, transform: `translate3d(0,0,0) scale(${scale})` }}><img className="gen1-map-image" src={MAP_IMAGE} alt="Carte complète haute résolution Pokémon Rouge et Bleu" draggable="false" />{LOCATIONS.map(([name, x, y]) => <div className="location-label" key={name} style={{ left: `${MAP_WIDTH * x / 100}px`, top: `${MAP_HEIGHT * y / 100}px` }}>{name}</div>)}{INTERACTABLES.map(item => <button key={item.id} className={`map-interaction interaction-${item.kind} ${selected === item.id ? "selected" : ""}`} style={{ left: `${MAP_WIDTH * item.x / 100}px`, top: `${MAP_HEIGHT * item.y / 100}px` }} title={`${item.title} — ${item.text}`} onClick={e => { e.stopPropagation(); onSelect(item.id); }}>{item.kind === "npc" ? "●" : item.kind === "grass" ? "✣" : item.kind === "cut" ? "♣" : item.kind === "strength" ? "◆" : item.kind === "water" ? "≈" : "↗"}</button>)}{mode === "gm" && INTERACTABLES.map(item => <div key={`gm-${item.id}`} className="gm-object-label" style={{ left: `${MAP_WIDTH * item.x / 100}px`, top: `${MAP_HEIGHT * item.y / 100 + 1.8}px` }}>{item.title}</div>)}{mode === "player" && <div className="player-map-marker" style={{ left: `${MAP_WIDTH * player.x / 100}px`, top: `${MAP_HEIGHT * player.y / 100}px` }}><span /></div>}</div></div><div className="zoom-hint">{mode === "gm" ? "Souris : molette · Trackpad : défilement/pincement · Tactile : glisser/pincer · clic sur objet" : near ? `E / toucher : ${near.title}` : "ZQSD / WASD / flèches · E pour interagir · caméra centrée"}</div></div>;
-}
-
-function App() {
-  const [mode, setMode] = useState("player");
-  const [enabled, setEnabled] = useState({ red: true, blue: true, yellow: true, green: true });
-  const [selected, setSelected] = useState(null);
-  return <div className={`game ${mode === "gm" ? "gm-mode" : "player-mode"}`}><Header mode={mode} setMode={m => { setMode(m); setSelected(null); }} /><main className="game-layout"><section className="game-area"><div className="player-hud"><div className="trainer-icon"/><div className="trainer-data"><span>DRESSEUR</span><strong>GABRIEL</strong><small>JDR Pokémon · Kanto</small></div><div className="location"><span>RÉGION</span><strong>KANTO</strong><small>Rouge · Bleu · Jaune · Vert</small></div></div><VersionLegend enabled={enabled} setEnabled={setEnabled}/><GameMap mode={mode} enabled={enabled} onSelect={setSelected} selected={selected}/></section>{mode === "gm" ? <VersionPanel enabled={enabled} selected={selected}/> : <aside className="player-panel"><div className="panel-title">EXPLORATION</div><div className="gm-message"><strong>{selected ? INTERACTABLES.find(x => x.id === selected)?.title : "Exploration active"}</strong><p>{selected ? INTERACTABLES.find(x => x.id === selected)?.text : "Approchez-vous d'un élément du décor puis utilisez E. Les interactions sont séparées du rendu graphique afin de pouvoir brancher ensuite les vraies données des cartes Gen I."}</p></div></aside>}</main></div>;
-}
-
-createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);
+createRoot(document.getElementById("root")).render(<React.StrictMode><App/></React.StrictMode>);
