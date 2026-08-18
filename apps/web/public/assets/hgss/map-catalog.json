@@ -1,0 +1,8 @@
+{
+  "source": "Pokemon - Version Argent SoulSilver (France) [b](2).nds supplied by user",
+  "format": "Nintendo DS / HGSS field map data",
+  "maps": {
+    "30": { "name": "Route 29", "matrix": [28, 9], "dimensions": [32, 32], "model": "route-29.nsbmd", "terrain": "route-29.bdhc" },
+    "57": { "name": "New Bark Town", "matrix": [32, 15], "dimensions": [32, 32], "model": "new-bark-town.nsbmd", "terrain": "new-bark-town.bdhc" }
+  }
+}
