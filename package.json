@@ -1,12 +1,11 @@
 {
   "name": "pokemon-rpg",
   "private": true,
-  "workspaces": [
-    "apps/*"
-  ],
+  "workspaces": ["apps/*"],
   "scripts": {
     "dev": "npm run dev --workspace=apps/api",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "hgss:extract": "python tools/hgss/extract_rom.py"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
