@@ -1,4 +1,5 @@
 import React,{useEffect,useMemo,useState}from'react';
+import'./hgss-map.css';
 const BASE=import.meta.env.BASE_URL||'/';
 const TILESET=`${BASE}assets/titleset1.png`;
 async function getJson(path){const r=await fetch(`${BASE}${path}`);if(!r.ok)throw new Error(`${path} HTTP ${r.status}`);return r.json();}
