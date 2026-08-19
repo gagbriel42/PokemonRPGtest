@@ -1,0 +1,48 @@
+name: Build sprite mapping
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/pokegra/png/**'
+      - 'tools/pokegra/pal/**'
+      - 'tools/build_sprite_mapping.py'
+      - '.github/workflows/build-sprite-mapping.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check Pillow
+
+      - name: Build mapping
+        run: python tools/build_sprite_mapping.py
+
+      - name: Commit generated mapping
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/public/data/sprite-assets.json \
+                  apps/web/public/data/sprite-assets-report.json \
+                  apps/web/public/data/pokemon-gen1-sprite-mapping.json
+          if git diff --cached --quiet; then
+            echo 'No generated changes.'
+            exit 0
+          fi
+          git commit -m 'chore: update generated sprite mapping'
+          git push
