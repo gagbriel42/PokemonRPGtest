@@ -4,6 +4,8 @@
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
     "db:seed": "node prisma/seed.js",
     "hgss:extract": "python tools/hgss/extract_rom.py",
     "hgss:models": "python tools/hgss/convert_models.py"
