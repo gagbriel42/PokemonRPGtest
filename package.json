@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "npm run dev --workspace=apps/api",
     "db:seed": "node prisma/seed.js",
-    "hgss:extract": "python tools/hgss/extract_rom.py"
+    "hgss:extract": "python tools/hgss/extract_rom.py",
+    "hgss:models": "python tools/hgss/convert_models.py"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
