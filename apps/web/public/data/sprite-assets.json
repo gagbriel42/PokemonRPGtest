@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "generatedBy": "tools/build_sprite_mapping.py",
   "source": "tools/pokegra/png",
   "sourceIsReadOnly": true,
@@ -19485,7 +19485,7 @@
     },
     "114": {
       "nationalDex": 114,
-      "name": "Tangtang",
+      "name": "Tangela",
       "archiveBase": 678,
       "front": null,
       "back": null,
@@ -19940,7 +19940,6 @@
       "status": "mapped"
     }
   },
-  "semanticMappingStatus": "gen1_deterministic_archive_order",
   "archiveLayout": {
     "entriesPerPokemon": 6,
     "femaleBackOffset": 0,
