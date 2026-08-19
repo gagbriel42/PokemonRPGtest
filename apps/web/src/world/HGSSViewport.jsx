@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState}from'react';
 import * as THREE from'three';
 import {GLTFLoader} from'three/examples/jsm/loaders/GLTFLoader.js';
+import './hgss-map.css';
 
 const BASE=(import.meta.env.BASE_URL||'/').replace(/\/$/,'');
 
@@ -34,7 +35,7 @@ export default function HGSSViewport({mapId=30,name='Route 29',connections=[],on
   const light=new THREE.HemisphereLight(0xffffff,0x44505c,2);scene.add(light);
   const resize=()=>{camera.left=-host.clientWidth/2;camera.right=host.clientWidth/2;camera.top=host.clientHeight/2;camera.bottom=-host.clientHeight/2;camera.updateProjectionMatrix();renderer.setSize(host.clientWidth,host.clientHeight)};window.addEventListener('resize',resize);resize();
   let raf=requestAnimationFrame(function tick(){renderer.render(scene,camera);raf=requestAnimationFrame(tick)});
-  return()=>{cancelAnimationFrame(raf);window.removeEventListener('resize',resize);renderer.dispose();host.removeChild(renderer.domElement);if(model)scene.remove(model)};
+  return()=>{cancelAnimationFrame(raf);window.removeEventListener('resize',resize);renderer.dispose();if(host.contains(renderer.domElement))host.removeChild(renderer.domElement);if(model)scene.remove(model)};
  },[mapId,meta]);
 
  const cells=matrix?.nonZero||[];
