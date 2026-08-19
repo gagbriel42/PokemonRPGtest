@@ -2,19 +2,39 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const repoRoot = path.resolve(__dirname, "../..");
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(configDir, "../..");
 const pngRoot = path.join(repoRoot, "tools", "pokegra", "png");
+
+function runPython(script) {
+  const candidates = process.platform === "win32" ? ["python", "py"] : ["python3", "python"];
+  for (const command of candidates) {
+    const result = spawnSync(command, [script], {
+      cwd: repoRoot,
+      stdio: "inherit",
+      encoding: "utf8",
+    });
+    if (!result.error) return result.status === 0;
+  }
+  return false;
+}
 
 function immutableSpriteAssets() {
   return {
     name: "immutable-sprite-assets",
     configureServer(server) {
-      const inspector = path.join(repoRoot, "tools", "hgss", "inspect_extracted_maps.py");
-      if (fs.existsSync(inspector) && fs.existsSync(path.join(repoRoot, "soulSilver_extracted"))) {
-        spawnSync("python", [inspector], { cwd: repoRoot, stdio: "inherit" });
+      const spriteBuilder = path.join(repoRoot, "tools", "build_sprite_mapping.py");
+      const mapInspector = path.join(repoRoot, "tools", "hgss", "inspect_extracted_maps.py");
+
+      // Generate metadata only. The source PNGs and extracted ROM files are never written.
+      if (fs.existsSync(spriteBuilder) && fs.existsSync(pngRoot)) runPython(spriteBuilder);
+      if (fs.existsSync(mapInspector) && fs.existsSync(path.join(repoRoot, "soulSilver_extracted"))) {
+        runPython(mapInspector);
       }
+
       server.middlewares.use("/sprite-source", (req, res, next) => {
         const relative = decodeURIComponent((req.url || "").replace(/^\//, ""));
         if (!relative.startsWith("tools/pokegra/png/") || relative.includes("..")) return next();
