@@ -18,16 +18,13 @@ const extracted={
   icons:'/assets/hgss/generated/nitrofs/pbr/poke_icon.narc',
   ui:'/assets/hgss/generated/nitrofs/data/battle_win.NSCR',
   bag:'/assets/hgss/generated/nitrofs/pbr/bag_gra.narc',
-  font:'/assets/hgss/generated/nitrofs/pbr/font.narc'
+  font:'/assets/hgss/generated/nitrofs/pbr/font.narc',
+  extractedRoot:'/assets/hgss/generated/battle-assets',
+  manifest:'/assets/hgss/battle/manifest.json'
 };
 
 export function getPokemonDexId(name){return DEX[name]??null}
-
-export function getHgssSpriteCandidates(name,side='front'){
-  const id=getPokemonDexId(name);
-  return id?[...localCandidates(id,side),remote(id,side)]:[];
-}
-
+export function getHgssSpriteCandidates(name,side='front'){const id=getPokemonDexId(name);return id?[...localCandidates(id,side),remote(id,side)]:[]}
 export function getHgssBattleAssets(){return extracted}
 export function getHgssBattleTexture(name){return `/assets/hgss/battle-ui/${name}.png`}
 export function spriteLabel(name,side){return `${name} · sprite HGSS ${side==='back'?'dos':'face'}`}
