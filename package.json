@@ -8,7 +8,8 @@
     "build:web": "npm run build --workspace=apps/web",
     "db:seed": "node prisma/seed.js",
     "hgss:extract": "python tools/hgss/extract_rom.py",
-    "hgss:models": "python tools/hgss/convert_models.py"
+    "hgss:models": "python tools/hgss/convert_models.py",
+    "hgss:battle-assets": "python tools/hgss/prepare_battle_assets.py"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
