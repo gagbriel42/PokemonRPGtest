@@ -4,7 +4,7 @@ import'./style.css';
 import'./battle/pokemon-picker.css';
 import{LOCATIONS}from'./world/locations.js';
 import HGSSViewport from'./world/HGSSViewport.jsx';
-import BattleView,{GmBattleView}from'./battle/BattleViewReal.jsx';
+import BattleView,{GmBattleViewReal as GmBattleView}from'./battle/BattleViewReal.jsx';
 const ALL=LOCATIONS,KANTO=ALL.filter(x=>x.region==='Kanto'),JOHTO=ALL.filter(x=>x.region==='Johto'),find=n=>ALL.find(x=>x.name===n);
 const POS={"New Bark Town":[8,82],"Cherrygrove City":[20,73],"Violet City":[34,61],"Azalea Town":[39,75],"Goldenrod City":[51,58],"Ecruteak City":[64,50],"Olivine City":[49,38],"Cianwood City":[34,29],"Mahogany Town":[75,42],"Blackthorn City":[84,62],"Lake of Rage":[77,29],"Victory Road":[91,70],"Mt. Silver":[96,78],"Route 29":[13,78],"Route 30":[27,68],"Route 31":[32,62],"Route 32":[37,68],"Route 33":[39,78],"Route 34":[45,64],"Route 35":[54,52],"Route 36":[58,57],"Route 37":[61,51],"Route 38":[57,42],"Route 39":[52,42],"Route 40":[42,34],"Route 41":[36,30],"Route 42":[69,45],"Route 43":[75,35],"Route 44":[79,52],"Route 45":[83,68],"Route 46":[19,84],"Route 47":[30,86],"Route 48":[38,86]};
 function Header({mode,setMode,search,setSearch,onEditor,onBattle}){return <header className="topbar"><div className="brand"><div className="ball"><i/></div><div><b>POKÉMON JDR</b><small>HGSS · OVERWORLD RÉEL</small></div></div><div className="actions"><input value={search}onChange={e=>setSearch(e.target.value)}placeholder="Ville, route, lieu…"/><button onClick={onEditor}>ÉDITEUR</button><button onClick={onBattle}>COMBAT</button><button className={mode==='player'?'active':''}onClick={()=>setMode('player')}>JOUEUR</button><button className={mode==='gm'?'active gm':''}onClick={()=>setMode('gm')}>MJ</button></div></header>}
