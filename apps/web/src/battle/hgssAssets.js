@@ -1,3 +1,5 @@
+import './pokemon-picker.css';
+
 const extracted={
   background:'/assets/hgss/generated/nitrofs/pbr/batt_bg.narc',
   objects:'/assets/hgss/generated/nitrofs/pbr/batt_obj.narc',
@@ -28,6 +30,12 @@ export function getHgssSpriteCandidates(pokemon,side='front'){
   if(!id)return[];
   const local=side==='front'&&id<=493?[localBattleSprite(id)]:[];
   return [...local,hgssRemote(id,side),modernRemote(id,side)];
+}
+
+export function getBattlePickerSprite(pokemon){
+  const id=getPokemonDexId(pokemon);
+  if(!id)return null;
+  return id<=493?localBattleSprite(id):hgssRemote(id,'front');
 }
 
 export function getHgssBattleAssets(){return extracted;}
