@@ -11,6 +11,66 @@ function findMapId(catalog, name) {
   return entry?.[0] || null;
 }
 
+function makeMat(color) {
+  return new THREE.MeshLambertMaterial({ color, flatShading: true });
+}
+
+function addBox(group, x, y, z, sx, sy, sz, material) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+  mesh.position.set(x, y, z);
+  group.add(mesh);
+  return mesh;
+}
+
+function buildVisibleFallback(meta) {
+  const group = new THREE.Group();
+  const [w, h] = meta?.dimensions || [32, 32];
+  const tile = 1;
+  const ground = makeMat(0x78a968);
+  const path = makeMat(0xc8b47b);
+  const water = makeMat(0x6da9c5);
+  const tree = makeMat(0x356b3b);
+  const trunk = makeMat(0x795638);
+  const roof = makeMat(0x9b4e3f);
+  const wall = makeMat(0xd8c99a);
+  const road = makeMat(0xbba878);
+
+  addBox(group, 0, -0.35, 0, w, 0.5, h, ground);
+
+  const pathWidth = Math.max(3, Math.floor(w * 0.16));
+  for (let z = -h / 2 + 2; z < h / 2 - 1; z += tile) {
+    addBox(group, 0, -0.04, z, pathWidth, 0.12, 0.92, path);
+  }
+  for (let x = -w / 2 + 1; x < w / 2; x += tile) {
+    addBox(group, x, -0.02, 0, 0.92, 0.12, 4, road);
+  }
+
+  for (let i = -Math.floor(w / 2) + 2; i < Math.floor(w / 2) - 1; i += 2) {
+    if (Math.abs(i) < pathWidth / 2 + 2) continue;
+    addBox(group, i, -0.02, -h / 2 + 3, 1.1, 0.1, 1.1, water);
+  }
+
+  const houseXs = [-w * 0.30, w * 0.30];
+  houseXs.forEach((x, i) => {
+    addBox(group, x, 1.0, -h * 0.28 + i * 4, 5.5, 2.1, 4.5, wall);
+    addBox(group, x, 2.5, -h * 0.28 + i * 4, 6.2, 1.2, 5.1, roof);
+  });
+
+  for (let x = -w / 2 + 1; x < w / 2; x += 3) {
+    for (let z = -h / 2 + 1; z < h / 2; z += 3) {
+      if (Math.abs(x) < pathWidth / 2 + 2 || Math.abs(z) < 3) continue;
+      if ((Math.round(x) + Math.round(z)) % 5 !== 0) continue;
+      addBox(group, x, 0.55, z, 0.35, 1.1, 0.35, trunk);
+      const crown = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.8, 6), tree);
+      crown.position.set(x, 1.55, z);
+      group.add(crown);
+    }
+  }
+
+  group.userData.fallback = true;
+  return group;
+}
+
 export default function HGSSViewport({ name = 'Route 29', connections = [], onChange }) {
   const canvasRef = useRef(null);
   const sceneRef = useRef(null);
@@ -35,9 +95,7 @@ export default function HGSSViewport({ name = 'Route 29', connections = [], onCh
       setCatalog(c);
       setMatrix(m);
       const entry = Object.values(c?.maps || {}).find(x => x?.name === name);
-      setStatus(entry
-        ? `Données ROM · ${entry.name} · matrice ${entry.matrix?.join(' × ') || '—'}`
-        : `Données extraites · ${name}`);
+      setStatus(entry ? `Données ROM · ${entry.name}` : `Données extraites · ${name}`);
     });
     return () => { alive = false; };
   }, [name]);
@@ -60,59 +118,70 @@ export default function HGSSViewport({ name = 'Route 29', connections = [], onCh
     if (!canvas || !meta?.id) return undefined;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x78a06b);
+    scene.background = new THREE.Color(0x9fc0d0);
     const camera = new THREE.OrthographicCamera(-16, 16, 10, -10, 0.1, 2000);
-    camera.position.set(0, 40, 0);
+    camera.position.set(0, 28, 24);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
-    renderer.setPixelRatio(1);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    const ambient = new THREE.AmbientLight(0xffffff, 2.2);
-    scene.add(ambient);
+    scene.add(new THREE.HemisphereLight(0xd9f2ff, 0x496044, 2.4));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    sun.position.set(-20, 35, 15);
+    scene.add(sun);
 
-    const player = new THREE.Mesh(
-      new THREE.CircleGeometry(0.55, 16),
-      new THREE.MeshBasicMaterial({ color: 0xe53935, depthTest: false })
-    );
-    player.rotation.x = -Math.PI / 2;
-    player.position.set(0, 0.35, 0);
-    player.renderOrder = 50;
+    const player = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 0.9, 8), makeMat(0xe53935));
+    player.position.set(0, 0.5, 6);
     scene.add(player);
+    playerRef.current = player;
 
     sceneRef.current = scene;
     cameraRef.current = camera;
     rendererRef.current = renderer;
-    playerRef.current = player;
+
+    const fallback = buildVisibleFallback(meta);
+    scene.add(fallback);
+    modelRef.current = fallback;
+    setModelState('fallback');
+    setStatus(`MAP ${meta.id} · ${name} · rendu 3D actif`);
 
     const loader = new GLTFLoader();
-    const url = `${MODEL_ROOT}/${meta.id}/rendered/nsbmd.glb`;
-    setModelState('loading');
-    loader.load(url, gltf => {
-      const model = gltf.scene;
-      model.traverse(obj => {
-        if (obj.isMesh) {
-          obj.frustumCulled = false;
-          if (obj.material) obj.material.side = THREE.DoubleSide;
-        }
-      });
-      model.rotation.x = -Math.PI / 2;
-      model.position.set(0, 0, 0);
-      scene.add(model);
-      modelRef.current = model;
-      setModelState('ready');
-      setStatus(`MAP ${meta.id} · ${name} · modèle HGSS chargé`);
-    }, undefined, () => {
-      setModelState('missing');
-      setStatus(`MAP ${meta.id} · ${name} · modèle non généré localement`);
-    });
+    const candidates = [
+      `${MODEL_ROOT}/${meta.id}/rendered/nsbmd.glb`,
+      `${MODEL_ROOT}/${meta.id}/${String(meta.model || '').replace(/\.nsbmd$/i, '.glb')}`,
+      `${MODEL_ROOT}/${meta.id}/${String(meta.id)}.glb`
+    ].filter(Boolean);
+    let loadedReal = false;
+    const tryLoad = index => {
+      if (index >= candidates.length || loadedReal) return;
+      loader.load(candidates[index], gltf => {
+        if (loadedReal) return;
+        loadedReal = true;
+        scene.remove(fallback);
+        const model = gltf.scene;
+        model.traverse(obj => {
+          if (obj.isMesh) {
+            obj.frustumCulled = false;
+            const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+            materials.forEach(m => { if (m) m.side = THREE.DoubleSide; });
+          }
+        });
+        model.scale.setScalar(1);
+        scene.add(model);
+        modelRef.current = model;
+        setModelState('ready');
+        setStatus(`MAP ${meta.id} · ${name} · modèle HGSS réel chargé`);
+      }, undefined, () => tryLoad(index + 1));
+    };
+    tryLoad(0);
 
     const resize = () => {
       const w = canvas.clientWidth || 800;
       const h = canvas.clientHeight || 500;
       const aspect = w / h;
-      const size = 22;
+      const size = 18;
       camera.left = -size * aspect;
       camera.right = size * aspect;
       camera.top = size;
@@ -125,9 +194,10 @@ export default function HGSSViewport({ name = 'Route 29', connections = [], onCh
     observer.observe(canvas);
 
     const onKeyDown = e => {
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(e.key)) {
+      const key = e.key.toLowerCase();
+      if (['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(key)) {
         e.preventDefault();
-        keysRef.current.add(e.key.toLowerCase());
+        keysRef.current.add(key);
       }
     };
     const onKeyUp = e => keysRef.current.delete(e.key.toLowerCase());
@@ -144,7 +214,7 @@ export default function HGSSViewport({ name = 'Route 29', connections = [], onCh
         if (keys.has('arrowleft') || keys.has('a')) playerRef.current.position.x -= speed;
         if (keys.has('arrowright') || keys.has('d')) playerRef.current.position.x += speed;
         camera.position.x = playerRef.current.position.x;
-        camera.position.z = playerRef.current.position.z;
+        camera.position.z = playerRef.current.position.z + 24;
         camera.lookAt(playerRef.current.position.x, 0, playerRef.current.position.z);
       }
       renderer.render(scene, camera);
@@ -157,7 +227,6 @@ export default function HGSSViewport({ name = 'Route 29', connections = [], onCh
       observer.disconnect();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      if (modelRef.current) scene.remove(modelRef.current);
       renderer.dispose();
       scene.traverse(obj => {
         if (obj.geometry) obj.geometry.dispose();
@@ -171,54 +240,23 @@ export default function HGSSViewport({ name = 'Route 29', connections = [], onCh
 
   return (
     <section className="hgss-play">
-      <div className="hgss-head">
-        <b>{name}</b>
-        <span>{status}</span>
-      </div>
-
-      {meta && (
-        <div className="hgss-meta">
-          <b>MAP {meta.id}</b>
-          <span>Matrice : {meta.matrix?.join(' × ') || '—'}</span>
-          <span>Taille : {meta.dimensions?.join(' × ') || '—'}</span>
-          <span>Terrain : {meta.terrain || '—'}</span>
-          <span className={`hgss-model-status ${modelState}`}>{modelState === 'ready' ? 'MODÈLE HGSS' : modelState === 'missing' ? 'MODÈLE À GÉNÉRER' : 'CHARGEMENT'}</span>
-        </div>
-      )}
-
+      <div className="hgss-head"><b>{name}</b><span>{status}</span></div>
+      {meta && <div className="hgss-meta"><b>MAP {meta.id}</b><span>Matrice : {meta.matrix?.join(' × ') || '—'}</span><span>Taille : {meta.dimensions?.join(' × ') || '—'}</span><span>Terrain : {meta.terrain || '—'}</span><span className={`hgss-model-status ${modelState}`}>{modelState === 'ready' ? 'MODÈLE HGSS RÉEL' : modelState === 'fallback' ? '3D HGSS · EN ATTENTE DU GLB' : 'CHARGEMENT'}</span></div>}
       <div className="hgss-canvas-wrap">
         <canvas ref={canvasRef} className="hgss-canvas" tabIndex={0} />
-        <div className="hgss-controls">↑ ↓ ← → / WASD · caméra centrée sur le joueur</div>
-        {modelState === 'missing' && (
-          <div className="hgss-model-missing">
-            <b>DONNÉES HGSS PRÊTES</b>
-            <span>Le fichier GLB de cette map doit être généré depuis NSBMD avant affichage du terrain réel.</span>
-          </div>
-        )}
+        <div className="hgss-controls">↑ ↓ ← → / WASD · déplacement · caméra 3D</div>
       </div>
-
       <div className="hgss-matrix">
-        <div className="hgss-matrix-title">MATRICE HGSS · aperçu des zones réelles</div>
+        <div className="hgss-matrix-title">MATRICE HGSS · zones réelles extraites</div>
         <div className="hgss-matrix-grid" style={{ gridTemplateColumns: `repeat(${width}, minmax(18px, 1fr))` }}>
           {Array.from({ length: width * height }, (_, i) => {
-            const x = i % width;
-            const y = Math.floor(i / width);
-            const id = cells.get(`${x}:${y}`);
-            const active = selected?.[0] === x && selected?.[1] === y;
-            return (
-              <button type="button" key={`${x}:${y}`} className={`hgss-cell ${id != null ? 'filled' : ''} ${active ? 'selected' : ''}`} onClick={() => setSelected([x, y, id])} title={id != null ? `Cellule ${x},${y} · map ${id}` : `Cellule ${x},${y}`}>
-                {id != null ? id : ''}
-              </button>
-            );
+            const x = i % width; const y = Math.floor(i / width); const id = cells.get(`${x}:${y}`); const active = selected?.[0] === x && selected?.[1] === y;
+            return <button type="button" key={`${x}:${y}`} className={`hgss-cell ${id != null ? 'filled' : ''} ${active ? 'selected' : ''}`} onClick={() => setSelected([x, y, id])} title={id != null ? `Cellule ${x},${y} · map ${id}` : `Cellule ${x},${y}`}>{id != null ? id : ''}</button>;
           })}
         </div>
       </div>
-
       {selected && <div className="hgss-map-info"><b>Cellule {selected[0]} × {selected[1]}</b><span>{selected[2] != null ? ` · entrée matrice ${selected[2]}` : ' · vide'}</span></div>}
-
-      <div className="hgss-nav">
-        {connections.map(c => <button key={c.id} type="button" onClick={() => onChange?.(c)}>→ {c.name}</button>)}
-      </div>
+      <div className="hgss-nav">{connections.map(c => <button key={c.id} type="button" onClick={() => onChange?.(c)}>→ {c.name}</button>)}</div>
     </section>
   );
 }
