@@ -1,6 +1,7 @@
 import React,{useMemo,useState}from'react';
 import{createRoot}from'react-dom/client';
 import'./style.css';
+import'./battle/pokemon-picker.css';
 import{LOCATIONS}from'./world/locations.js';
 import HGSSViewport from'./world/HGSSViewport.jsx';
 import BattleView,{GmBattleView}from'./battle/BattleView.jsx';
