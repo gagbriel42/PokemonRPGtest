@@ -1,1 +1,1 @@
-export {default,GmBattleSystem as GmAdvancedBattleView} from './BattleSystem.jsx';
+export {default,GmBattleSystemV2 as GmAdvancedBattleView} from './BattleSystemV2.jsx';
