@@ -3,11 +3,6 @@ name: Build real HGSS assets
 on:
   workflow_dispatch:
     inputs:
-      rom_url:
-        description: "URL directe vers ton fichier SoulSilver.nds (optionnel si HGSS_ROM_URL est configuré dans les secrets)"
-        required: false
-        type: string
-        default: ""
       maps:
         description: "IDs des maps HGSS à extraire"
         required: false
@@ -29,28 +24,27 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Récupérer la ROM source
-        env:
-          INPUT_ROM_URL: ${{ inputs.rom_url }}
-          SECRET_ROM_URL: ${{ secrets.HGSS_ROM_URL }}
+      - name: Reconstruire automatiquement la ROM depuis les parts du dépôt
         run: |
           set -euo pipefail
-          URL="$INPUT_ROM_URL"
-          if [ -z "$URL" ]; then
-            URL="$SECRET_ROM_URL"
-          fi
-          if [ -z "$URL" ]; then
-            echo "ERREUR: aucune source SoulSilver n'a été configurée."
-            echo ""
-            echo "Deux possibilités :"
-            echo "  1. lancer le workflow avec le champ 'rom_url' ;"
-            echo "  2. configurer le secret GitHub HGSS_ROM_URL une seule fois."
+          PARTS=(rom-parts/soulSilver.part*)
+          if [ ! -e "${PARTS[0]}" ]; then
+            echo "ERREUR: aucun fichier rom-parts/soulSilver.partXXX trouvé."
             exit 1
           fi
-          echo "Téléchargement de la source HGSS..."
-          curl --fail --location --retry 3 --silent --show-error "$URL" -o /tmp/SoulSilver.nds
-          test -s /tmp/SoulSilver.nds
-          echo "ROM reçue : $(stat -c%s /tmp/SoulSilver.nds) octets"
+
+          echo "Parts trouvées :"
+          printf '  %s (%s octets)\n' "${PARTS[@]}" "$(stat -c%s "${PARTS[@]}" 2>/dev/null || true)"
+
+          rm -f /tmp/SoulSilver.nds
+          for part in "${PARTS[@]}"; do
+            echo "Ajout de $part..."
+            cat "$part" >> /tmp/SoulSilver.nds
+          done
+
+          SIZE=$(stat -c%s /tmp/SoulSilver.nds)
+          echo "ROM reconstruite : ${SIZE} octets"
+          test "$SIZE" -gt 100000000
 
       - name: Extraire et construire les vrais assets HGSS
         env:
