@@ -1,0 +1,54 @@
+name: Extract HGSS map assets
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'rom-parts/**'
+      - 'tools/hgss/**'
+      - '.github/workflows/hgss-extract.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check ROM parts
+        run: |
+          ls -lh rom-parts/
+          test "$(find rom-parts -maxdepth 1 -type f -name 'soulSilver.part*' | wc -l)" -ge 2
+
+      - name: Reassemble ROM
+        run: python3 tools/hgss/reassemble_rom_parts.py --out /tmp/SoulSilver.nds
+
+      - name: Extract Route 29, New Bark Town and Cherrygrove data
+        run: |
+          python3 tools/hgss/extract_rom.py /tmp/SoulSilver.nds \
+            --out /tmp/hgss-generated \
+            --maps 30,57
+
+      - name: Inspect extracted map data
+        run: |
+          find /tmp/hgss-generated/maps -maxdepth 2 -type f -printf '%p %s bytes\n' | sort
+          cat /tmp/hgss-generated/rom-info.json
+
+      - name: Upload extracted map data
+        uses: actions/upload-artifact@v4
+        with:
+          name: hgss-route29-map-data
+          path: /tmp/hgss-generated/maps
+          if-no-files-found: error
+
+      - name: Upload extraction manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: hgss-route29-manifest
+          path: /tmp/hgss-generated/rom-info.json
+          if-no-files-found: error
