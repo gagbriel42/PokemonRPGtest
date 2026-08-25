@@ -1,35 +1,84 @@
 name: Build real HGSS assets
+
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'rom-parts/**'
-      - 'tools/hgss/**'
+    inputs:
+      rom_url:
+        description: "URL directe vers ton fichier SoulSilver.nds (optionnel si HGSS_ROM_URL est configuré dans les secrets)"
+        required: false
+        type: string
+        default: ""
+      maps:
+        description: "IDs des maps HGSS à extraire"
+        required: false
+        type: string
+        default: "30,57"
+
 jobs:
-  extract:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Reassemble SoulSilver
-        run: python3 tools/hgss/reassemble_rom_parts.py --out /tmp/SoulSilver.nds
-      - name: Extract NitroFS and maps
-        run: python3 tools/hgss/extract_rom.py /tmp/SoulSilver.nds --out /tmp/hgss-generated --maps 30,57
-      - name: Correctly parse HGSS map containers
-        run: python3 tools/hgss/reparse_mapbin.py /tmp/hgss-generated/nitrofs/a/0/6/5 --maps 30,57 --out /tmp/hgss-corrected
-      - name: Package map and graphics sources
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Préparer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Récupérer la ROM source
+        env:
+          INPUT_ROM_URL: ${{ inputs.rom_url }}
+          SECRET_ROM_URL: ${{ secrets.HGSS_ROM_URL }}
         run: |
-          mkdir -p /tmp/hgss-assets
-          cp -a /tmp/hgss-corrected/maps /tmp/hgss-assets/
-          for d in a/0/4/1 a/0/4/2 a/0/4/3 a/0/4/4 a/0/5/8 a/0/6/5; do
-            if [ -e "/tmp/hgss-generated/nitrofs/$d" ]; then
-              mkdir -p "/tmp/hgss-assets/nitrofs/$(dirname "$d")"
-              cp -a "/tmp/hgss-generated/nitrofs/$d" "/tmp/hgss-assets/nitrofs/$d"
-            fi
-          done
-          find /tmp/hgss-assets -type f -printf '%p %s bytes\n' | sort > /tmp/hgss-assets/manifest.txt
-      - name: Upload real HGSS sources
+          set -euo pipefail
+          URL="$INPUT_ROM_URL"
+          if [ -z "$URL" ]; then
+            URL="$SECRET_ROM_URL"
+          fi
+          if [ -z "$URL" ]; then
+            echo "ERREUR: aucune source SoulSilver n'a été configurée."
+            echo ""
+            echo "Deux possibilités :"
+            echo "  1. lancer le workflow avec le champ 'rom_url' ;"
+            echo "  2. configurer le secret GitHub HGSS_ROM_URL une seule fois."
+            exit 1
+          fi
+          echo "Téléchargement de la source HGSS..."
+          curl --fail --location --retry 3 --silent --show-error "$URL" -o /tmp/SoulSilver.nds
+          test -s /tmp/SoulSilver.nds
+          echo "ROM reçue : $(stat -c%s /tmp/SoulSilver.nds) octets"
+
+      - name: Extraire et construire les vrais assets HGSS
+        env:
+          HGSS_ROM: /tmp/SoulSilver.nds
+          HGSS_MAPS: ${{ inputs.maps }}
+        run: |
+          python3 tools/hgss/build_real_assets.py
+
+      - name: Vérifier le résultat
+        run: |
+          set -euo pipefail
+          test -f apps/web/public/assets/hgss/generated/maps/30/nsbmd.bin
+          test -f apps/web/public/assets/hgss/generated/maps/30/per.bin
+          test -f apps/web/public/assets/hgss/generated/maps/30/bld.bin
+          test -f apps/web/public/assets/hgss/generated/maps/30/bdhc.bin
+          find apps/web/public/assets/hgss/generated -type f -printf '%p %s bytes\n' | sort | tee /tmp/hgss-manifest.txt
+
+      - name: Créer l'archive des assets
+        run: |
+          cd apps/web/public/assets/hgss/generated
+          zip -r /tmp/hgss-real-assets.zip .
+
+      - name: Publier les assets
         uses: actions/upload-artifact@v4
         with:
-          name: hgss-route29-real-assets
-          path: /tmp/hgss-assets
+          name: hgss-real-assets-${{ inputs.maps }}
+          path: |
+            /tmp/hgss-real-assets.zip
+            /tmp/hgss-manifest.txt
           if-no-files-found: error
+          retention-days: 14
