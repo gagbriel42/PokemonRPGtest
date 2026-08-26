@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: "auto"
+  push:
+    paths:
+      - "tools/hgss/**"
+      - ".github/workflows/hgss-real-assets.yml"
+      - "apps/web/public/assets/hgss/johto-matrix.json"
 
 jobs:
   build:
@@ -40,7 +45,7 @@ jobs:
       - name: Extraire et construire les vrais assets HGSS
         env:
           HGSS_ROM: /tmp/SoulSilver.nds
-          HGSS_MAPS: ${{ inputs.maps }}
+          HGSS_MAPS: ${{ inputs.maps || 'auto' }}
         run: |
           python3 tools/hgss/build_real_assets.py
       - name: Vérifier le résultat
@@ -74,7 +79,7 @@ jobs:
       - name: Publier les assets
         uses: actions/upload-artifact@v4
         with:
-          name: hgss-real-assets-${{ inputs.maps }}
+          name: hgss-real-assets-${{ inputs.maps || 'auto' }}
           path: |
             /tmp/hgss-real-assets.zip
             /tmp/hgss-manifest.txt
