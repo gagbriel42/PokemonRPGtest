@@ -1,4 +1,4 @@
 import React from'react';
-import{BattleSystemV3}from'./BattleSystemV3.jsx';
-export default function AdvancedBattleView({onExit}){return <BattleSystemV3 onExit={onExit} gm={false}/>}
-export function GmAdvancedBattleView({onExit}){return <BattleSystemV3 onExit={onExit} gm/>}
+import BattleViewFixed,{GmBattleViewFixed}from'./BattleViewFixed.jsx';
+export default function AdvancedBattleView({onExit}){return <BattleViewFixed onExit={onExit}/>}
+export function GmAdvancedBattleView({onExit}){return <GmBattleViewFixed onExit={onExit}/>}
