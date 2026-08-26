@@ -40,30 +40,52 @@ def narc_entries(path):
 
 
 def parse(data, out):
-    # HGSS mapbin: 20-byte header. The first four uint32 are section
-    # lengths (PER, BLD, NSBMD, BDHC). The fifth uint32 is metadata,
-    # NOT another section length. Older code incorrectly summed all five.
-    if len(data) < 20:
-        raise ValueError('map trop court')
+    # Real HGSS map-BIN layout:
+    #   u32 PER length
+    #   u32 BLD length
+    #   u32 NSBMD length
+    #   u32 BDHC length
+    #   optional BGS block (starts with 0x1234 + u16 length)
+    #   PER, BLD, NSBMD, BDHC
+    #
+    # The previous parser incorrectly treated the first 20 bytes as a
+    # five-u32 header. That shifted every section by four bytes and caused
+    # the NSBMD parser to report a missing BMD0 signature.
+    if len(data) < 16:
+        raise ValueError(f'map trop court: {len(data)} octets')
 
-    per, bld, nsbmd, bdhc, metadata = struct.unpack_from('<5I', data, 0)
+    per, bld, nsbmd, bdhc = struct.unpack_from('<4I', data, 0)
+    p = 16
+
+    # HGSS stores a BGS block before the four main sections. Its first word
+    # is 0x1234 (bytes 34 12), followed by a u16 payload length.
+    bgs = b''
+    bgs_len = 0
+    if p + 4 <= len(data) and u16(data, p) == 0x1234:
+        declared = u16(data, p + 2)
+        total = declared + 4
+        if total < 4 or p + total > len(data):
+            raise ValueError(
+                f'BGS invalide: payload={declared}, offset={p}, taille={len(data)}'
+            )
+        bgs = data[p:p + total]
+        bgs_len = total
+        p += total
+
     section_lengths = (per, bld, nsbmd, bdhc)
-    p = 20
     sections_end = p + sum(section_lengths)
-
     if sections_end > len(data):
         raise ValueError(
-            f'sections invalides: PER={per}, BLD={bld}, NSBMD={nsbmd}, '
-            f'BDHC={bdhc}, metadata={metadata}, taille={len(data)}'
+            'sections invalides: '
+            f'PER={per}, BLD={bld}, NSBMD={nsbmd}, BDHC={bdhc}, '
+            f'BGS={bgs_len}, offset={p}, taille={len(data)}'
         )
 
-    parts = {}
+    parts = {'bgs': bgs}
     for name, n in zip(('per', 'bld', 'nsbmd', 'bdhc'), section_lengths):
         parts[name] = data[p:p + n]
         p += n
 
-    # Preserve bytes after the four declared sections. They are not part
-    # of the four map sections but must not be silently discarded.
     parts['tail'] = data[p:]
 
     out.mkdir(parents=True, exist_ok=True)
@@ -72,8 +94,16 @@ def parse(data, out):
 
     if len(parts['per']) != 2048:
         raise ValueError(f'PER != 2048 ({len(parts["per"])})')
+    if len(parts['bld']) % 48:
+        raise ValueError(f'BLD longueur inattendue: {len(parts["bld"])} (pas multiple de 48)')
     if parts['nsbmd'][:4] != b'BMD0':
-        raise ValueError('NSBMD BMD0 absent')
+        # Give enough structural information to diagnose a genuinely
+        # different map variant without dumping binary data into the log.
+        sig = parts['nsbmd'][:16].hex(' ')
+        raise ValueError(
+            f'NSBMD BMD0 absent: longueur={len(parts["nsbmd"])}, '
+            f'premiers_octets={sig}'
+        )
 
     cells = []
     for i in range(1024):
@@ -82,7 +112,7 @@ def parse(data, out):
             'y': i // 32,
             'type': parts['per'][2 * i],
             'collision': parts['per'][2 * i + 1],
-            'blocked': parts['per'][2 * i + 1] == 0x80,
+            'blocked': bool(parts['per'][2 * i + 1] & 0x80),
         })
 
     (out / 'permissions.json').write_text(
@@ -96,7 +126,7 @@ def parse(data, out):
                 'bld': bld,
                 'nsbmd': nsbmd,
                 'bdhc': bdhc,
-                'metadata': metadata,
+                'bgs': bgs_len,
             },
             'sectionsEnd': sections_end,
             'tail': len(parts['tail']),
