@@ -4,37 +4,28 @@ on:
   workflow_dispatch:
     inputs:
       maps:
-        description: "IDs des maps HGSS à extraire"
+        description: "IDs des maps HGSS à extraire (auto = toutes les maps présentes dans la matrice Johto)"
         required: false
         type: string
-        default: "30,57"
+        default: "auto"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
       - name: Vérifier les parts de la ROM
         run: |
           set -euo pipefail
-          ls -lh rom-parts/
-          test -f rom-parts/soulSilver.part000
-          test -f rom-parts/soulSilver.part001
-          test -f rom-parts/soulSilver.part002
-          test -f rom-parts/soulSilver.part003
-          test -f rom-parts/soulSilver.part004
-          test -f rom-parts/soulSilver.part005
-          test -f rom-parts/soulSilver.part006
+          test -d rom-parts
+          for i in 000 001 002 003 004 005 006; do test -f "rom-parts/soulSilver.part${i}"; done
           echo "Parts SoulSilver détectées :"
           find rom-parts -maxdepth 1 -type f -name 'soulSilver.part*' -printf '%f %s octets\n' | sort
-
       - name: Reconstruire automatiquement la ROM depuis les parts du dépôt
         run: |
           set -euo pipefail
@@ -42,31 +33,28 @@ jobs:
           SIZE=$(stat -c%s /tmp/SoulSilver.nds)
           echo "ROM reconstruite : ${SIZE} octets"
           test "$SIZE" -gt 100000000
-          echo "Premiers octets de la ROM :"
-          xxd -l 32 /tmp/SoulSilver.nds
-
       - name: Préparer Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - name: Extraire et construire les vrais assets HGSS
         env:
           HGSS_ROM: /tmp/SoulSilver.nds
           HGSS_MAPS: ${{ inputs.maps }}
         run: |
           python3 tools/hgss/build_real_assets.py
-
       - name: Vérifier le résultat
         run: |
           set -euo pipefail
+          test -f apps/web/public/assets/hgss/johto-matrix.json
           test -f apps/web/public/assets/hgss/generated/maps/30/nsbmd.bin
-          test -f apps/web/public/assets/hgss/generated/maps/30/per.bin
-          test -f apps/web/public/assets/hgss/generated/maps/30/bld.bin
-          test -f apps/web/public/assets/hgss/generated/maps/30/bdhc.bin
+          test -f apps/web/public/assets/hgss/generated/maps/57/nsbmd.bin
           test -f apps/web/public/assets/hgss/generated/maps/30/rendered/nsbmd.glb
+          test -f apps/web/public/assets/hgss/generated/maps/57/rendered/nsbmd.glb
+          COUNT=$(find apps/web/public/assets/hgss/generated/maps -mindepth 1 -maxdepth 1 -type d | wc -l)
+          echo "Maps HGSS construites : ${COUNT}"
+          test "$COUNT" -ge 20
           find apps/web/public/assets/hgss/generated -type f -printf '%p %s bytes\n' | sort | tee /tmp/hgss-manifest.txt
-
       - name: Enregistrer les vrais assets dans le dépôt
         run: |
           set -euo pipefail
@@ -79,12 +67,10 @@ jobs:
             git commit -m "build: update real HGSS assets"
             git push
           fi
-
       - name: Créer l'archive des assets
         run: |
           cd apps/web/public/assets/hgss/generated
           zip -r /tmp/hgss-real-assets.zip .
-
       - name: Publier les assets
         uses: actions/upload-artifact@v4
         with:
