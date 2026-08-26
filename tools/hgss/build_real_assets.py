@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""One-click local HGSS asset build for Codespaces.
+"""One-click HGSS asset build.
 
-The ROM is intentionally kept outside Git. The builder automatically:
-1. finds SoulSilver.nds if present;
-2. otherwise reassembles rom-parts/soulSilver.part000...;
-3. extracts NitroFS and the selected maps;
-4. reparses HGSS map containers with the corrected 20-byte header parser;
-5. copies the useful generated assets into the web public directory.
-
-No command-line arguments are required.
+The ROM is assembled from rom-parts when needed. extract_rom.py already emits
+validated map sections, so this builder deliberately does not run the older
+reparse_mapbin.py pass.
 """
 from __future__ import annotations
 
@@ -30,7 +25,7 @@ MAPS = os.environ.get("HGSS_MAPS", "30,57")
 
 def run(*args: object) -> None:
     cmd = [str(x) for x in args]
-    print("[HGSS]", " ".join(cmd))
+    print("[HGSS]", " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=ROOT, check=True)
 
 
@@ -62,10 +57,7 @@ def get_rom() -> Path:
         TMP.mkdir(parents=True, exist_ok=True)
         run(sys.executable, ROOT / "tools/hgss/reassemble_rom_parts.py", "--out", ROM)
         return ROM
-    raise SystemExit(
-        "[HGSS] Aucune ROM SoulSilver trouvée. Placez les fichiers soulSilver.part000... "
-        "dans rom-parts/ ou définissez HGSS_ROM."
-    )
+    raise SystemExit("[HGSS] Aucune ROM SoulSilver trouvée dans rom-parts/.")
 
 
 def main() -> int:
@@ -81,21 +73,21 @@ def main() -> int:
             pass
 
     raw = TMP / "raw"
-    corrected = TMP / "corrected"
-    if raw.exists(): shutil.rmtree(raw)
-    if corrected.exists(): shutil.rmtree(corrected)
+    if raw.exists():
+        shutil.rmtree(raw)
     raw.mkdir(parents=True, exist_ok=True)
-    corrected.mkdir(parents=True, exist_ok=True)
 
-    run(sys.executable, ROOT / "tools/hgss/extract_rom.py", str(rom), "--out", str(raw), "--maps", MAPS)
+    # extract_rom.py is the authoritative parser for the real HGSS map data.
+    # Do NOT run reparse_mapbin.py afterwards: it uses an incompatible legacy
+    # interpretation of the map container and was the source of the BMD0 error.
     run(
         sys.executable,
-        ROOT / "tools/hgss/reparse_mapbin.py",
-        str(raw / "nitrofs/a/0/6/5"),
+        ROOT / "tools/hgss/extract_rom.py",
+        str(rom),
+        "--out",
+        str(raw),
         "--maps",
         MAPS,
-        "--out",
-        str(corrected),
     )
 
     if PUBLIC.exists():
@@ -103,15 +95,20 @@ def main() -> int:
             if child.name != ".gitkeep":
                 shutil.rmtree(child) if child.is_dir() else child.unlink()
     PUBLIC.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(corrected / "maps", PUBLIC / "maps", dirs_exist_ok=True)
 
-    # Keep the extracted NitroFS graphics needed by the map renderer.
+    maps_src = raw / "maps"
+    if not maps_src.is_dir():
+        raise RuntimeError(f"[HGSS] Dossier maps absent après extraction: {maps_src}")
+    shutil.copytree(maps_src, PUBLIC / "maps", dirs_exist_ok=True)
+
     for rel in ("a/0/4/1", "a/0/4/2", "a/0/4/3", "a/0/4/4", "a/0/5/8", "a/0/6/5"):
         src = raw / "nitrofs" / rel
         if src.exists():
             shutil.copytree(src, PUBLIC / "nitrofs" / rel, dirs_exist_ok=True)
 
-    (PUBLIC / ".build-stamp.json").write_text(json.dumps(fingerprint, indent=2) + "\n", encoding="utf-8")
+    (PUBLIC / ".build-stamp.json").write_text(
+        json.dumps(fingerprint, indent=2) + "\n", encoding="utf-8"
+    )
     print(f"[HGSS] Build terminé. Assets disponibles dans {PUBLIC}")
     return 0
 
