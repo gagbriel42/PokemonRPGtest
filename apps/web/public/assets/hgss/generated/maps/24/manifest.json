@@ -1,0 +1,11 @@
+{
+  "lengths": {
+    "bgs": 4,
+    "per": 2048,
+    "bld": 672,
+    "nsbmd": 12020,
+    "bdhc": 66
+  },
+  "buildings": 14,
+  "total": 14826
+}
