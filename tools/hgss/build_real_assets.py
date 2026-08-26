@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build real HGSS map assets and a rendered Johto overview."""
+"""Build real HGSS map assets and the real Johto regional overview."""
 from __future__ import annotations
 import hashlib,json,os,shutil,subprocess,sys
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[2];PARTS=ROOT/'rom-parts';PUBLIC=ROOT/'apps/web/public/assets/hgss/generated';TMP=Path('/tmp/pokemon-rpg-hgss');ROM=TMP/'SoulSilver.nds';APICULA_DIR=TMP/'apicula';MAPS_ENV=os.environ.get('HGSS_MAPS','auto');APICULA_REPO='https://github.com/scurest/apicula.git'
+ROOT=Path(__file__).resolve().parents[2];PARTS=ROOT/'rom-parts';PUBLIC=ROOT/'apps/web/public/assets/hgss/generated';TMP=Path('/tmp/pokemon-rpg-hgss');ROM=TMP/'SoulSilver.nds';APICULA_DIR=TMP/'apicula';MAPS_ENV=os.environ.get('HGSS_MAPS','auto')
 def run(*args):
  cmd=[str(x) for x in args];print('[HGSS]',' '.join(cmd),flush=True);subprocess.run(cmd,cwd=ROOT,check=True)
 def sha256(p):
@@ -53,14 +53,13 @@ def convert_map_models(maps):
   preferred=outdir/'nsbmd.glb'
   if candidates[0]!=preferred:candidates[0].rename(preferred)
 def render_world_map():
- """Render a deterministic overview from extracted map thumbnails when available.
- The frontend consumes this PNG; no fake SVG coastline or hand-drawn Johto geometry is used."""
+ """Fetch the real Johto regional map into the generated web assets."""
  out=ROOT/'apps/web/public/assets/hgss/johto-world-map.png';out.parent.mkdir(parents=True,exist_ok=True)
  script=ROOT/'tools/hgss/render_johto_world_map.py'
  if not script.is_file():raise RuntimeError('render_johto_world_map.py absent')
  run(sys.executable,script,'--assets',PUBLIC,'--out',out)
 def main():
- rom=get_rom();maps=resolve_maps();stamp=PUBLIC/'.build-stamp.json';fp={'sha256':sha256(rom),'maps':maps,'converter':'apicula-current','worldmap':'render-v2'}
+ rom=get_rom();maps=resolve_maps();stamp=PUBLIC/'.build-stamp.json';fp={'sha256':sha256(rom),'maps':maps,'converter':'apicula-current','worldmap':'real-regional-map-v3'}
  raw=TMP/'raw';shutil.rmtree(raw,ignore_errors=True)
  run(sys.executable,ROOT/'tools/hgss/extract_rom.py',str(rom),'--out',str(raw),'--maps',maps)
  shutil.rmtree(PUBLIC,ignore_errors=True);PUBLIC.mkdir(parents=True,exist_ok=True)
