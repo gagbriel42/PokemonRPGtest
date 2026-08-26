@@ -13,38 +13,42 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Vérifier les parts de la ROM
+        run: |
+          set -euo pipefail
+          ls -lh rom-parts/
+          test -f rom-parts/soulSilver.part000
+          test -f rom-parts/soulSilver.part001
+          test -f rom-parts/soulSilver.part002
+          test -f rom-parts/soulSilver.part003
+          test -f rom-parts/soulSilver.part004
+          test -f rom-parts/soulSilver.part005
+          test -f rom-parts/soulSilver.part006
+          echo "Parts SoulSilver détectées :"
+          find rom-parts -maxdepth 1 -type f -name 'soulSilver.part*' -printf '%f %s octets\n' | sort
+
+      - name: Reconstruire automatiquement la ROM depuis les parts du dépôt
+        run: |
+          set -euo pipefail
+          python3 tools/hgss/reassemble_rom_parts.py --out /tmp/SoulSilver.nds
+          SIZE=$(stat -c%s /tmp/SoulSilver.nds)
+          echo "ROM reconstruite : ${SIZE} octets"
+          test "$SIZE" -gt 100000000
+          echo "Premiers octets de la ROM :"
+          xxd -l 32 /tmp/SoulSilver.nds
 
       - name: Préparer Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Reconstruire automatiquement la ROM depuis les parts du dépôt
-        run: |
-          set -euo pipefail
-          PARTS=(rom-parts/soulSilver.part*)
-          if [ ! -e "${PARTS[0]}" ]; then
-            echo "ERREUR: aucun fichier rom-parts/soulSilver.partXXX trouvé."
-            exit 1
-          fi
-
-          echo "Parts trouvées :"
-          printf '  %s (%s octets)\n' "${PARTS[@]}" "$(stat -c%s "${PARTS[@]}" 2>/dev/null || true)"
-
-          rm -f /tmp/SoulSilver.nds
-          for part in "${PARTS[@]}"; do
-            echo "Ajout de $part..."
-            cat "$part" >> /tmp/SoulSilver.nds
-          done
-
-          SIZE=$(stat -c%s /tmp/SoulSilver.nds)
-          echo "ROM reconstruite : ${SIZE} octets"
-          test "$SIZE" -gt 100000000
 
       - name: Extraire et construire les vrais assets HGSS
         env:
@@ -60,7 +64,21 @@ jobs:
           test -f apps/web/public/assets/hgss/generated/maps/30/per.bin
           test -f apps/web/public/assets/hgss/generated/maps/30/bld.bin
           test -f apps/web/public/assets/hgss/generated/maps/30/bdhc.bin
+          test -f apps/web/public/assets/hgss/generated/maps/30/rendered/nsbmd.glb
           find apps/web/public/assets/hgss/generated -type f -printf '%p %s bytes\n' | sort | tee /tmp/hgss-manifest.txt
+
+      - name: Enregistrer les vrais assets dans le dépôt
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/public/assets/hgss/generated
+          if git diff --cached --quiet; then
+            echo "Aucun changement d'assets à committer."
+          else
+            git commit -m "build: update real HGSS assets"
+            git push
+          fi
 
       - name: Créer l'archive des assets
         run: |
