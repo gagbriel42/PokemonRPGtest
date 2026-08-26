@@ -23,6 +23,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Generate the real HGSS data inside the same runner that builds the web
+      # app. This makes the generated assets part of the actual Pages bundle.
+      - name: Build real HGSS assets for the web bundle
+        env:
+          HGSS_ROM: /tmp/SoulSilver.nds
+          HGSS_MAPS: "30,57"
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp
+          rm -f /tmp/SoulSilver.nds
+          PARTS=(rom-parts/soulSilver.part*)
+          if [ ! -e "${PARTS[0]}" ]; then
+            echo "ERREUR: rom-parts/soulSilver.partXXX introuvable"
+            exit 1
+          fi
+          for part in "${PARTS[@]}"; do
+            cat "$part" >> /tmp/SoulSilver.nds
+          done
+          test "$(stat -c%s /tmp/SoulSilver.nds)" -gt 100000000
+          python3 tools/hgss/build_real_assets.py
+          test -f apps/web/public/assets/hgss/generated/maps/30/nsbmd.bin
+          test -f apps/web/public/assets/hgss/generated/maps/30/per.bin
+          test -f apps/web/public/assets/hgss/generated/maps/57/nsbmd.bin
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -34,6 +63,14 @@ jobs:
 
       - name: Build web application
         run: npm run build --workspace=apps/web
+
+      - name: Verify HGSS assets are in the Pages bundle
+        run: |
+          set -euo pipefail
+          test -f apps/web/dist/assets/hgss/generated/maps/30/nsbmd.bin
+          test -f apps/web/dist/assets/hgss/generated/maps/30/per.bin
+          test -f apps/web/dist/assets/hgss/generated/maps/57/nsbmd.bin
+          echo "HGSS assets présents dans dist/"
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
