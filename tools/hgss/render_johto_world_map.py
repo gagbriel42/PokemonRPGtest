@@ -1,29 +1,46 @@
 #!/usr/bin/env python3
+"""Fetch the real HGSS Johto regional map used by the web world map."""
 from __future__ import annotations
-import argparse,math,struct,zlib
+import argparse
+import json
+import urllib.error
+import urllib.request
 from pathlib import Path
 
-def png(w,h,pix):
- raw=b''.join(b'\0'+bytes(pix[y*w*3:(y+1)*w*3]) for y in range(h))
- def ch(t,d):
-  import struct,zlib
-  return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
- return b'\x89PNG\r\n\x1a\n'+ch(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+ch(b'IDAT',zlib.compress(raw,9))+ch(b'IEND',b'')
-def main():
- ap=argparse.ArgumentParser();ap.add_argument('--assets',required=True);ap.add_argument('--out',required=True);a=ap.parse_args()
- # This generator deliberately does not invent geography. It creates a clear non-white
- # diagnostic overview from the actual extracted map set until a tile-level renderer is available.
- maps=sorted((Path(a.assets)/'maps').glob('*'),key=lambda p:int(p.name) if p.name.isdigit() else 99999)
- cols=8; cell=128; rows=max(1,math.ceil(len(maps)/cols));w=cols*cell;h=rows*cell
- pix=bytearray([0]*(w*h*3))
- for i,p in enumerate(maps):
-  x=(i%cols)*cell;y=(i//cols)*cell
-  seed=sum(p.name.encode())
-  # visible, deterministic map cards derived from real map IDs; never pretend these are geography.
-  for yy in range(cell):
-   for xx in range(cell):
-    q=(seed+xx//16*7+yy//16*11)%64
-    k=((y+yy)*w+(x+xx))*3; pix[k:k+3]=bytes((48+q,72+q,48+q//2))
- out=Path(a.out);out.parent.mkdir(parents=True,exist_ok=True);out.write_bytes(png(w,h,pix))
- print(f'[HGSS] Diagnostic map overview: {len(maps)} extracted maps -> {out}')
-if __name__=='__main__':main()
+SOURCES = [
+    ("Bulbagarden Archives / JohtoMap.png", "https://archives.bulbagarden.net/wiki/Special:Redirect/file/JohtoMap.png"),
+    ("Wikimedia Commons Johto map fallback", "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Johto_Map_%28cropped%29.png/1280px-Johto_Map_%28cropped%29.png"),
+]
+
+def download(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "PokemonRPGtest-HGSS-asset-builder/1.0"})
+    with urllib.request.urlopen(req, timeout=45) as r:
+        data = r.read()
+        ctype = (r.headers.get("Content-Type") or "").lower()
+    if len(data) < 10_000:
+        raise RuntimeError(f"image trop petite ({len(data)} octets)")
+    if not (data.startswith(b"\x89PNG\r\n\x1a\n") or data.startswith(b"\xff\xd8\xff")):
+        raise RuntimeError(f"réponse non-image ({ctype or 'type inconnu'})")
+    return data
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--assets", required=True)
+    ap.add_argument("--out", required=True)
+    args = ap.parse_args()
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    errors = []
+    for name, url in SOURCES:
+        try:
+            data = download(url)
+            out.write_bytes(data)
+            out.with_suffix(".json").write_text(json.dumps({"source": name, "url": url, "bytes": len(data), "generated": True}, indent=2) + "\n", encoding="utf-8")
+            print(f"[HGSS] Real Johto map: {name} -> {out} ({len(data)} bytes)", flush=True)
+            return 0
+        except (OSError, urllib.error.URLError, RuntimeError) as exc:
+            errors.append(f"{name}: {exc}")
+    raise SystemExit("Impossible de récupérer la vraie carte Johto: " + " | ".join(errors))
+
+if __name__ == "__main__":
+    raise SystemExit(main())
