@@ -57,10 +57,10 @@ def convert_map_models(maps):
  for map_id in maps.split(','):
   src=PUBLIC/'maps'/map_id/'nsbmd.bin'
   if not src.is_file():continue
-  outdir=PUBLIC/'maps'/map_id/'rendered';shutil.rmtree(outdir,ignore_errors=True);outdir.mkdir(parents=True,exist_ok=True)
-  # Keep the model first; append real BTX files so Apicula can resolve
-  # Game Freak's separately stored map textures. --more-textures forces
-  # generation of texture images needed by the selected model.
+  outdir=PUBLIC/'maps'/map_id/'rendered'
+  # Apicula expects -o to point to a directory that does NOT already exist.
+  # Creating it ourselves causes: "output directory already exists".
+  shutil.rmtree(outdir,ignore_errors=True)
   args=[apicula,'convert','-f=glb','--more-textures',src]
   # A small set is preferable to thousands of unrelated BTX files. The
   # model's own embedded TEX is always used; external BTX candidates are
@@ -81,8 +81,6 @@ def main():
  shutil.rmtree(PUBLIC,ignore_errors=True);PUBLIC.mkdir(parents=True,exist_ok=True)
  copy_any(raw/'maps',PUBLIC/'maps');copy_any(raw/'nitrofs',PUBLIC/'nitrofs')
  convert_map_models(maps)
- # The web map is now assembled from the same real map models. Do not fetch
- # or ship any fan-made Johto image.
  stamp.write_text(json.dumps(fp,indent=2)+'\n')
  print(f'[HGSS] Build terminé: {len(maps.split(","))} maps Johto, sans carte externe',flush=True);return 0
 if __name__=='__main__':raise SystemExit(main())
