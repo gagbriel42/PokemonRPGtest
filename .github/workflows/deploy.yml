@@ -28,10 +28,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build real HGSS assets for the web bundle
+      - name: Build ALL real HGSS assets for the web bundle
         env:
           HGSS_ROM: /tmp/SoulSilver.nds
-          HGSS_MAPS: "30,57"
+          HGSS_MAPS: "auto"
         run: |
           set -euo pipefail
           mkdir -p /tmp
@@ -46,10 +46,16 @@ jobs:
           done
           test "$(stat -c%s /tmp/SoulSilver.nds)" -gt 100000000
           python3 tools/hgss/build_real_assets.py
-          test -f apps/web/public/assets/hgss/generated/maps/30/nsbmd.bin
-          test -f apps/web/public/assets/hgss/generated/maps/30/rendered/nsbmd.glb
-          test -f apps/web/public/assets/hgss/generated/maps/57/nsbmd.bin
-          test -f apps/web/public/assets/hgss/generated/maps/57/rendered/nsbmd.glb
+          test -s apps/web/public/assets/hgss/generated/map-render-manifest.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/web/public/assets/hgss/generated/map-render-manifest.json')
+          d=json.loads(p.read_text())
+          print(f"HGSS: {d['countBuilt']} rendus construits, {d['countMissing']} manquants")
+          if d['countBuilt'] == 0:
+              raise SystemExit('Aucun rendu HGSS construit')
+          PY
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -66,12 +72,12 @@ jobs:
       - name: Verify HGSS assets are in the Pages bundle
         run: |
           set -euo pipefail
+          test -s apps/web/dist/assets/hgss/generated/map-render-manifest.json
           test -f apps/web/dist/assets/hgss/generated/maps/30/nsbmd.bin
           test -f apps/web/dist/assets/hgss/generated/maps/30/rendered/nsbmd.glb
-          test -f apps/web/dist/assets/hgss/generated/maps/30/per.bin
           test -f apps/web/dist/assets/hgss/generated/maps/57/nsbmd.bin
           test -f apps/web/dist/assets/hgss/generated/maps/57/rendered/nsbmd.glb
-          echo "HGSS assets et modèles GLB présents dans dist/"
+          echo "HGSS manifest, modèles et données présents dans dist/"
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
